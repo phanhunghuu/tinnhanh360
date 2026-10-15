@@ -114,54 +114,122 @@ async def parse_article(req: ParseRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.post("/api/render-video")
-async def render_video(req: RenderRequest):
-    job_id  = str(uuid.uuid4())[:8]
+# In-memory storage for render jobs
+jobs_status = {}
+
+def update_job_progress(job_id: str, step: str, message: str, percent: int):
+    if job_id in jobs_status:
+        jobs_status[job_id].update({
+            "step": step,
+            "message": message,
+            "percent": percent,
+        })
+
+
+def execute_render_job(job_id: str, req_data: dict):
     job_dir = os.path.join(OUTPUT_DIR, job_id)
     os.makedirs(job_dir, exist_ok=True)
-
     try:
-        # 1. Generate TTS cho từng scene (hỗ trợ cả Zalo AI lẫn Edge-TTS)
+        scenes = req_data["scenes"]
+        total_scenes = len(scenes)
+
+        # 1. TTS Generation
+        update_job_progress(job_id, "tts", f"Đang tạo giọng đọc AI (0/{total_scenes})...", 5)
         tts_results = []
-        for idx, scene in enumerate(req.scenes):
+        for idx, scene in enumerate(scenes):
+            update_job_progress(
+                job_id,
+                "tts",
+                f"Đang sinh giọng đọc cảnh {idx + 1}/{total_scenes}: {scene.get('headline', '')[:30]}",
+                5 + int(30 * (idx / max(1, total_scenes)))
+            )
             audio_path = os.path.join(job_dir, f"audio_{idx:02d}.mp3")
             result = generate_tts(
                 text=scene["text"],
-                voice=req.voice,
+                voice=req_data["voice"],
                 audio_path=audio_path,
-                zalo_api_key=req.zalo_key or "c6B974D16LbRHcSR1hRGGswtXV0LUOr6"
+                zalo_api_key=req_data.get("zalo_key") or "c6B974D16LbRHcSR1hRGGswtXV0LUOr6"
             )
             tts_results.append(result)
 
-        # 2. Render video (kèm nhạc nền BGM nếu bật)
+        # 2. Render Scene Clips & Pipeline
+        update_job_progress(job_id, "render", "Đang xử lý layout đồ họa và hiệu ứng chuyển động cảnh...", 38)
+
+        def on_video_progress(step_key, step_msg, factor):
+            # factor từ 0.0 -> 1.0 (chiếm từ 40% đến 95%)
+            cur_pct = 40 + int(factor * 55)
+            update_job_progress(job_id, step_key, step_msg, cur_pct)
+
         final_name = f"news_{job_id}.mp4"
         final_path = os.path.join(job_dir, final_name)
-
-        bgm_to_use = DEFAULT_BGM_PATH if (req.use_bgm and os.path.exists(DEFAULT_BGM_PATH)) else None
+        use_bgm = req_data.get("use_bgm", True)
+        bgm_to_use = DEFAULT_BGM_PATH if (use_bgm and os.path.exists(DEFAULT_BGM_PATH)) else None
 
         render_full_video(
-            scenes=req.scenes,
-            source_name=req.source,
-            article_images=req.images,
+            scenes=scenes,
+            source_name=req_data["source"],
+            article_images=req_data.get("images", []),
             tts_results=tts_results,
             work_dir=job_dir,
             final_output_path=final_path,
             bgm_path=bgm_to_use,
-            bgm_volume=req.bgm_volume,
+            bgm_volume=req_data.get("bgm_volume", 0.10),
+            progress_callback=on_video_progress,
         )
 
-        return {"success": True, "video_url": f"/outputs/{job_id}/{final_name}"}
+        update_job_progress(job_id, "complete", "Đã hoàn thành xuất video 9:16 chất lượng cao!", 100)
+        jobs_status[job_id]["status"] = "completed"
+        jobs_status[job_id]["video_url"] = f"/outputs/{job_id}/{final_name}"
 
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+        jobs_status[job_id]["status"] = "failed"
+        jobs_status[job_id]["error"] = str(e)
+        jobs_status[job_id]["message"] = f"Lỗi: {e}"
+
+
+@app.post("/api/render-video")
+async def render_video(req: RenderRequest):
+    import threading
+    job_id = str(uuid.uuid4())[:8]
+    jobs_status[job_id] = {
+        "status": "processing",
+        "step": "init",
+        "message": "Khởi động tiến trình render...",
+        "percent": 2,
+        "video_url": None,
+        "error": None,
+    }
+
+    req_data = {
+        "source": req.source,
+        "images": req.images,
+        "scenes": req.scenes,
+        "voice": req.voice,
+        "zalo_key": req.zalo_key,
+        "use_bgm": req.use_bgm,
+        "bgm_volume": req.bgm_volume,
+    }
+
+    t = threading.Thread(target=execute_render_job, args=(job_id, req_data), daemon=True)
+    t.start()
+
+    return {"success": True, "job_id": job_id}
+
+
+@app.get("/api/render-status/{job_id}")
+def get_render_status(job_id: str):
+    if job_id not in jobs_status:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return jobs_status[job_id]
 
 
 @app.get("/")
 def root():
     idx = os.path.join(STATIC_DIR, "index.html")
     return FileResponse(idx)
+
 
 
 if __name__ == "__main__":

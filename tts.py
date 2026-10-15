@@ -74,8 +74,8 @@ def _generate_zalo_tts(text: str, voice: str, audio_path: str, api_key: str, spe
     return False
 
 
-async def _stream_edge_tts(text: str, voice: str, audio_path: str, rate: str = "+30%") -> list:
-    """Stream edge-tts có retry tối đa 3 lần."""
+async def _stream_edge_tts(text: str, voice: str, audio_path: str, rate: str = "+14%", pitch: str = "-3Hz") -> list:
+    """Stream edge-tts có retry tối đa 3 lần với rate và pitch được tối ưu chuẩn MC thời sự."""
     clean_text = text.strip()
     if not clean_text or not any(c.isalnum() for c in clean_text):
         clean_text = "..."
@@ -83,7 +83,7 @@ async def _stream_edge_tts(text: str, voice: str, audio_path: str, rate: str = "
     last_err = None
     for attempt in range(3):
         try:
-            c = edge_tts.Communicate(clean_text, voice, rate=rate)
+            c = edge_tts.Communicate(clean_text, voice, rate=rate, pitch=pitch)
             boundaries = []
             audio_bytes = bytearray()
 
@@ -126,13 +126,13 @@ def generate_tts(
     text: str,
     voice: str,
     audio_path: str,
-    rate: str = "+30%",
+    rate: str = "+14%",
     zalo_api_key: Optional[str] = None
 ) -> dict:
     """
     Sinh audio từ text:
     - Nếu voice là giọng Zalo và có API key -> Gọi Zalo AI TTS (tốc độ đọc nhanh 1.1).
-    - Ngược lại -> Gọi Edge-TTS tốc độ +30%.
+    - Ngược lại -> Gọi Edge-TTS AI Neural với tốc độ +14% và pitch -3Hz trầm ấm như MC thời sự VTV24.
     """
     text = (text or "").strip()
     if not text:
@@ -144,16 +144,17 @@ def generate_tts(
     # Ánh xạ giới tính khi cần fallback sang Edge-TTS
     is_male = voice in ["zalo-3", "zalo-4", "vi-VN-NamMinhNeural"]
     edge_fallback_voice = "vi-VN-NamMinhNeural" if is_male else "vi-VN-HoaiMyNeural"
+    pitch_tuned = "-3Hz" if is_male else "-1Hz"
 
     if use_zalo:
         success = _generate_zalo_tts(text, voice, audio_path, zalo_api_key, speed=1.1)
         if not success:
             print(f"Zalo AI failed, fallbacking to Edge-TTS ({edge_fallback_voice})...")
-            boundaries = _run_in_thread(_stream_edge_tts(text, edge_fallback_voice, audio_path, rate=rate))
+            boundaries = _run_in_thread(_stream_edge_tts(text, edge_fallback_voice, audio_path, rate=rate, pitch=pitch_tuned))
     else:
         # Nếu chọn Edge-TTS
         edge_voice = voice if not voice.startswith("zalo-") else edge_fallback_voice
-        boundaries = _run_in_thread(_stream_edge_tts(text, edge_voice, audio_path, rate=rate))
+        boundaries = _run_in_thread(_stream_edge_tts(text, edge_voice, audio_path, rate=rate, pitch=pitch_tuned))
 
     # Chuẩn hóa âm thanh đầu ra về chuẩn 44100Hz Stereo MP3
     try:

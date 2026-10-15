@@ -101,11 +101,54 @@
     .scene-item-body.open { display: block; }
     .scene-item select { padding: 7px 10px; font-size: 12px; width: auto; }
 
-    /* Status */
+    /* Status & Progress */
     .status {
-      margin-top: 14px; padding: 11px 14px; border-radius: 10px;
-      background: rgba(10,15,30,.7); border: 1px solid rgba(255,255,255,.05);
+      margin-top: 14px; padding: 14px 16px; border-radius: 12px;
+      background: rgba(10,15,30,.85); border: 1px solid rgba(255,255,255,.08);
       font-size: 13px; display: none;
+    }
+    .progress-container {
+      margin-top: 10px; width: 100%;
+    }
+    .progress-bar-bg {
+      width: 100%; height: 8px; background: rgba(255,255,255,.08);
+      border-radius: 6px; overflow: hidden; position: relative;
+    }
+    .progress-bar-fill {
+      width: 0%; height: 100%;
+      background: linear-gradient(90deg, #3b82f6, #6366f1, #10b981);
+      border-radius: 6px;
+      transition: width 0.35s ease;
+      position: relative;
+    }
+    .progress-bar-fill::after {
+      content: ''; position: absolute; top:0; left:0; right:0; bottom:0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.3), transparent);
+      animation: progress-shimmer 1.5s infinite;
+    }
+    @keyframes progress-shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    .progress-meta {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 6px; font-size: 12px; font-weight: 600;
+    }
+    .progress-steps {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 12px;
+    }
+    .p-step {
+      font-size: 11px; padding: 6px 8px; border-radius: 6px; text-align: center;
+      background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06);
+      color: var(--muted); transition: all .3s;
+    }
+    .p-step.active {
+      background: rgba(59,130,246,.15); border-color: rgba(59,130,246,.4);
+      color: #93c5fd; font-weight: 700;
+    }
+    .p-step.done {
+      background: rgba(16,185,129,.15); border-color: rgba(16,185,129,.4);
+      color: #6ee7b7; font-weight: 700;
     }
 
     /* Preview */
@@ -208,17 +251,15 @@
           <div class="form-group">
             <label>Giọng đọc:</label>
             <select id="voiceSelect">
-              <optgroup label="🌟 Zalo AI (Tự nhiên, chuẩn phát thanh viên)">
-                <option value="zalo-3" selected>Zalo AI - Nam Miền Nam (Ấm áp, truyền cảm)</option>
+              <optgroup label="⚡ AI Neural (Miễn phí 100% không giới hạn - Tinh chỉnh chuẩn VTV)">
+                <option value="vi-VN-NamMinhNeural" selected>🎙️ Nam MC Thời Sự VTV (Trầm ấm, uy quyền - Khuyên dùng)</option>
+                <option value="vi-VN-HoaiMyNeural">🎙️ Nữ MC Thời Sự VTV (Rõ ràng, truyền cảm)</option>
+              </optgroup>
+              <optgroup label="🌟 Zalo AI (Cần tài khoản Zalo AI Portal trả phí)">
+                <option value="zalo-3">Zalo AI - Nam Miền Nam (Ấm áp)</option>
                 <option value="zalo-2">Zalo AI - Nữ Miền Bắc (Chuẩn VTV)</option>
                 <option value="zalo-1">Zalo AI - Nữ Miền Nam</option>
-                <option value="zalo-4">Zalo AI - Nam Miền Bắc (Trầm ấm, thời sự)</option>
-                <option value="zalo-5">Zalo AI - Nữ Miền Bắc 2</option>
-                <option value="zalo-6">Zalo AI - Nữ Miền Nam 2</option>
-              </optgroup>
-              <optgroup label="⚡ Edge-TTS (Miễn phí 100% không giới hạn)">
-                <option value="vi-VN-HoaiMyNeural">Edge-TTS - Hoài My (Nữ)</option>
-                <option value="vi-VN-NamMinhNeural">Edge-TTS - Nam Minh (Nam)</option>
+                <option value="zalo-4">Zalo AI - Nam Miền Bắc (Trầm ấm)</option>
               </optgroup>
             </select>
           </div>
@@ -234,7 +275,24 @@
         </button>
       </div>
 
-      <div class="status" id="statusBox"></div>
+      <div class="status" id="statusBox">
+        <div id="statusText">🎙️ Đang khởi động...</div>
+        <div class="progress-container" id="progressWrap">
+          <div class="progress-meta">
+            <span id="progressStepTitle" style="color:#60a5fa;">Đang xử lý...</span>
+            <span id="progressPercent" style="color:var(--text); font-variant-numeric: tabular-nums;">0%</span>
+          </div>
+          <div class="progress-bar-bg">
+            <div class="progress-bar-fill" id="progressBarFill"></div>
+          </div>
+          <div class="progress-steps">
+            <div class="p-step" id="step_tts">1. Giọng Đọc</div>
+            <div class="p-step" id="step_render">2. Hiệu Ứng</div>
+            <div class="p-step" id="step_merge">3. Ghép Clip</div>
+            <div class="p-step" id="step_bgm">4. BGM & Xuất</div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- CỘT PHẢI: PREVIEW -->
@@ -475,22 +533,59 @@
 
   window.addEventListener('DOMContentLoaded', checkBgmStatus);
 
-  /* ── Render ───────────────────────────────────────────────── */
+  /* ── Render with Real-Time Progress ──────────────────────── */
+  function updateStepsUI(stepKey) {
+    const steps = ['tts', 'render', 'merge', 'bgm'];
+    const stepEl = {
+      'tts': document.getElementById('step_tts'),
+      'render': document.getElementById('step_render'),
+      'merge': document.getElementById('step_merge'),
+      'bgm': document.getElementById('step_bgm'),
+    };
+
+    let activeFound = false;
+    steps.forEach((s) => {
+      const el = stepEl[s];
+      if (!el) return;
+      el.classList.remove('active', 'done');
+      if (s === stepKey || (stepKey === 'render_clip' && s === 'render')) {
+        el.classList.add('active');
+        activeFound = true;
+      } else if (!activeFound) {
+        el.classList.add('done');
+      }
+    });
+
+    if (stepKey === 'complete') {
+      steps.forEach(s => stepEl[s] && stepEl[s].classList.add('done'));
+    }
+  }
+
   async function renderVideo() {
     if (!currentData) return;
     const btn = document.getElementById('btnRender');
     const statusBox = document.getElementById('statusBox');
+    const statusText = document.getElementById('statusText');
+    const progressStepTitle = document.getElementById('progressStepTitle');
+    const progressPercent = document.getElementById('progressPercent');
+    const progressBarFill = document.getElementById('progressBarFill');
     const videoEl = document.getElementById('videoEl');
     const dlBtn = document.getElementById('dlBtn');
     const emptyHint = document.getElementById('emptyHint');
 
     btn.disabled = true;
     document.getElementById('renderIcon').innerHTML = '<span class="spinner"></span>';
-    document.getElementById('renderText').innerText = 'Đang sinh giọng đọc & render...';
+    document.getElementById('renderText').innerText = 'Đang tiến hành dựng video...';
+    
     statusBox.style.display = 'block';
-    statusBox.style.borderColor = '';
-    statusBox.style.background = '';
-    statusBox.innerHTML = '🎙️ Đang tạo giọng đọc từng scene, đo duration chuẩn xác, render background zoom + overlay text...';
+    statusBox.style.borderColor = 'rgba(59,130,246,.3)';
+    statusBox.style.background = 'rgba(10,15,30,.85)';
+    statusText.innerText = '🚀 Đang gửi yêu cầu và bắt đầu tiến trình render...';
+    progressStepTitle.innerText = 'Chuẩn bị dữ liệu';
+    progressPercent.innerText = '5%';
+    progressBarFill.style.width = '5%';
+    updateStepsUI('tts');
+
     videoEl.style.display = 'none';
     dlBtn.style.display = 'none';
 
@@ -514,24 +609,77 @@
       const json = await res.json();
       if (!res.ok) throw new Error(json.detail);
 
-      statusBox.innerHTML = '✅ <strong>Hoàn tất!</strong> Video đã render xong kèm nhạc nền êm ái.';
-      statusBox.style.borderColor = 'rgba(34,197,94,.4)';
-      statusBox.style.background = 'rgba(34,197,94,.1)';
+      const jobId = json.job_id;
 
-      emptyHint.style.display = 'none';
-      videoEl.src = json.video_url;
-      videoEl.style.display = 'block';
-      videoEl.load(); videoEl.play();
+      // Poll status every 800ms
+      const pollTimer = setInterval(async () => {
+        try {
+          const sRes = await fetch(`/api/render-status/${jobId}`);
+          if (!sRes.ok) return;
+          const sData = await sRes.json();
 
-      dlBtn.href = json.video_url;
-      dlBtn.style.display = 'block';
+          const pct = sData.percent || 0;
+          progressBarFill.style.width = pct + '%';
+          progressPercent.innerText = pct + '%';
+          statusText.innerText = sData.message || 'Đang xử lý...';
+
+          if (sData.step === 'tts') {
+            progressStepTitle.innerText = '🎙️ Bước 1/4: Tạo giọng đọc AI cho từng phân cảnh';
+            updateStepsUI('tts');
+          } else if (sData.step === 'render' || sData.step === 'render_clip') {
+            progressStepTitle.innerText = '🎨 Bước 2/4: Render đồ họa, chuyển động Ken Burns & phụ đề';
+            updateStepsUI('render');
+          } else if (sData.step === 'merge') {
+            progressStepTitle.innerText = '🎞️ Bước 3/4: Ghép nối các phân cảnh thành video liền mạch';
+            updateStepsUI('merge');
+          } else if (sData.step === 'bgm') {
+            progressStepTitle.innerText = '🎵 Bước 4/4: Lồng nhạc nền BGM & xử lý fade out';
+            updateStepsUI('bgm');
+          }
+
+          if (sData.status === 'completed') {
+            clearInterval(pollTimer);
+            updateStepsUI('complete');
+            progressBarFill.style.width = '100%';
+            progressPercent.innerText = '100%';
+            progressStepTitle.innerText = '🎉 Hoàn tất xuất video!';
+            statusText.innerHTML = '✅ <strong>Thành công!</strong> Video đã sẵn sàng xem trước và tải về.';
+            statusBox.style.borderColor = 'rgba(34,197,94,.4)';
+            statusBox.style.background = 'rgba(34,197,94,.1)';
+
+            emptyHint.style.display = 'none';
+            videoEl.src = sData.video_url;
+            videoEl.style.display = 'block';
+            videoEl.load(); videoEl.play();
+
+            dlBtn.href = sData.video_url;
+            dlBtn.style.display = 'block';
+
+            btn.disabled = false;
+            document.getElementById('renderIcon').innerText = '🚀';
+            document.getElementById('renderText').innerText = 'Render Lại Video';
+          } else if (sData.status === 'failed') {
+            clearInterval(pollTimer);
+            throw new Error(sData.error || 'Có lỗi xảy ra trong quá trình render');
+          }
+        } catch (pollErr) {
+          clearInterval(pollTimer);
+          btn.disabled = false;
+          document.getElementById('renderIcon').innerText = '🚀';
+          document.getElementById('renderText').innerText = 'Render Video 9:16';
+          statusText.innerHTML = '❌ <strong>Lỗi:</strong> ' + pollErr.message;
+          statusBox.style.borderColor = 'rgba(239,68,68,.4)';
+          statusBox.style.background = 'rgba(239,68,68,.1)';
+        }
+      }, 800);
+
     } catch (e) {
-      statusBox.innerHTML = '❌ <strong>Lỗi:</strong> ' + e.message;
-      statusBox.style.borderColor = 'rgba(239,68,68,.4)';
-    } finally {
       btn.disabled = false;
       document.getElementById('renderIcon').innerText = '🚀';
       document.getElementById('renderText').innerText = 'Render Video 9:16';
+      statusText.innerHTML = '❌ <strong>Lỗi:</strong> ' + e.message;
+      statusBox.style.borderColor = 'rgba(239,68,68,.4)';
+      statusBox.style.background = 'rgba(239,68,68,.1)';
     }
   }
 </script>

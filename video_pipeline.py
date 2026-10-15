@@ -200,6 +200,7 @@ def render_full_video(
     fps: int = 24,
     bgm_path: Optional[str] = None,
     bgm_volume: float = 0.15,
+    progress_callback: Optional[callable] = None,
 ):
     """
     Dựng hoàn chỉnh video từ các scene:
@@ -317,8 +318,17 @@ def render_full_video(
             )
 
         clip_paths.append(clip_out)
+        if progress_callback:
+            progress_callback(
+                "render_clip",
+                f"Đã render xong cảnh {idx + 1}/{len(scenes)}: {headline or sc_type}",
+                (idx + 1) / len(scenes)
+            )
 
     # Concat các clips thành video tổng hợp
+    if progress_callback:
+        progress_callback("merge", "Đang ghép nối các cảnh video...", 0.90)
+
     concat_list = os.path.join(work_dir, "final_concat.txt")
     with open(concat_list, "w") as f:
         for p in clip_paths:
@@ -337,6 +347,8 @@ def render_full_video(
 
     # Nếu có nhạc nền BGM -> Mix nhạc nền vào video với âm lượng bgm_volume VÀ FADE OUT KHÚC CUỐI
     if bgm_path and os.path.exists(bgm_path):
+        if progress_callback:
+            progress_callback("bgm", "Đang lồng nhạc nền và xử lý hiệu ứng âm thanh fade out...", 0.95)
         vol = max(0.01, min(1.0, float(bgm_volume)))
         # Đo tổng thời lượng video để tính điểm bắt đầu fade out
         try:
