@@ -124,15 +124,20 @@ def parse_article_to_scenes(
 
         scored_sents.append((score, idx, sent))
 
-    # Sắp xếp lấy 3 - 4 câu điểm cao nhất nhưng giữ nguyên thứ tự diễn biến thời gian (theo idx)
-    scored_sents.sort(key=lambda x: x[0], reverse=True)
-    top_candidates = scored_sents[:4]
+    # Lọc bỏ hẳn các câu bị điểm âm hoặc câu chứa chi tiết vụn vặt
+    valid_sents = [item for item in scored_sents if item[0] >= 0]
+    if not valid_sents:
+        valid_sents = scored_sents
+
+    # Sắp xếp lấy 3 câu có điểm chất lượng cao nhất
+    valid_sents.sort(key=lambda x: x[0], reverse=True)
+    top_candidates = valid_sents[:3]
     # Sắp xếp lại theo trình tự thời gian ban đầu của bài báo
     top_candidates.sort(key=lambda x: x[1])
 
     selected_sents = [item[2] for item in top_candidates]
     if not selected_sents:
-        selected_sents = all_sentences[:3]
+        selected_sents = all_sentences[:2]
 
     headlines_cycle = [
         "DIỄN BIẾN VỤ VIỆC",
