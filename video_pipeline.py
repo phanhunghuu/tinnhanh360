@@ -189,12 +189,15 @@ def render_full_video(
     work_dir: str,
     final_output_path: str,
     fps: int = 24,
+    bgm_path: Optional[str] = None,
+    bgm_volume: float = 0.15,
 ):
     """
     Dựng hoàn chỉnh video từ các scene:
     - Frame 1: Tiêu đề + ảnh trong khung bo tròn (zoompan trong khung)
     - Frame 2, 3...: Chi tiết + ảnh trong khung bo tròn (zoompan trong khung)
     - Frame Cuối: Follow outro tĩnh
+    - Hỗ trợ mix nhạc nền BGM lặp vô tận với volume tùy chỉnh
     """
     os.makedirs(work_dir, exist_ok=True)
     date_str = get_current_date_str()
@@ -291,11 +294,28 @@ def render_full_video(
         for p in clip_paths:
             f.write(f"file '{os.path.abspath(p)}'\n")
 
+    raw_concat_video = os.path.join(work_dir, "concat_temp.mp4") if (bgm_path and os.path.exists(bgm_path)) else final_output_path
+
     subprocess.run([
         "ffmpeg", "-y",
         "-f", "concat", "-safe", "0", "-i", concat_list,
         "-c", "copy",
-        final_output_path
+        raw_concat_video
     ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    # Nếu có nhạc nền BGM -> Mix nhạc nền vào video với âm lượng bgm_volume
+    if bgm_path and os.path.exists(bgm_path):
+        vol = max(0.01, min(1.0, float(bgm_volume)))
+        filter_complex = f"[0:a]volume=1.0[voice];[1:a]volume={vol}[bgm];[voice][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]"
+        cmd_mix = [
+            "ffmpeg", "-y",
+            "-i", raw_concat_video,
+            "-stream_loop", "-1", "-i", bgm_path,
+            "-filter_complex", filter_complex,
+            "-map", "0:v", "-map", "[aout]",
+            "-c:v", "copy", "-c:a", "aac",
+            final_output_path
+        ]
+        subprocess.run(cmd_mix, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     return final_output_path

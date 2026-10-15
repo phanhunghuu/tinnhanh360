@@ -24,3 +24,4 @@ Thumbs.db
 .env
 server.log
 *.wav
+assets/default_bgm.mp3

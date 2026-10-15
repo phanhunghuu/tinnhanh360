@@ -16,10 +16,17 @@ from video_pipeline import render_full_video
 
 app = FastAPI(title="AI News Video Maker Pro")
 
+import shutil
+from fastapi import UploadFile, File
+
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "outputs")
+ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
 os.makedirs(STATIC_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+os.makedirs(ASSETS_DIR, exist_ok=True)
+
+DEFAULT_BGM_PATH = os.path.join(ASSETS_DIR, "default_bgm.mp3")
 
 app.mount("/outputs", StaticFiles(directory=OUTPUT_DIR), name="outputs")
 
@@ -36,6 +43,39 @@ class RenderRequest(BaseModel):
     scenes: List[dict]
     voice: str = "vi-VN-HoaiMyNeural"
     zalo_key: Optional[str] = "c6B974D16LbRHcSR1hRGGswtXV0LUOr6"
+    use_bgm: bool = True
+    bgm_volume: float = 0.15
+
+
+@app.post("/api/upload-bgm")
+async def upload_bgm(file: UploadFile = File(...)):
+    """Upload và lưu file nhạc nền MP3 mặc định dùng mãi mãi cho tất cả video."""
+    try:
+        content = await file.read()
+        if len(content) < 1000:
+            raise Exception("File âm thanh không hợp lệ hoặc quá nhỏ.")
+        with open(DEFAULT_BGM_PATH, "wb") as f:
+            f.write(content)
+        return {
+            "success": True,
+            "filename": file.filename,
+            "size_kb": round(len(content) / 1024, 1),
+            "message": "Đã lưu nhạc nền mặc định thành công!"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/bgm-status")
+def bgm_status():
+    """Kiểm tra xem đã có nhạc nền mặc định chưa."""
+    has_bgm = os.path.exists(DEFAULT_BGM_PATH) and os.path.getsize(DEFAULT_BGM_PATH) > 0
+    size_kb = round(os.path.getsize(DEFAULT_BGM_PATH) / 1024, 1) if has_bgm else 0
+    return {
+        "has_bgm": has_bgm,
+        "size_kb": size_kb,
+        "default_volume": 0.15
+    }
 
 
 @app.post("/api/parse-article")
@@ -73,9 +113,11 @@ async def render_video(req: RenderRequest):
             )
             tts_results.append(result)
 
-        # 2. Render video
+        # 2. Render video (kèm nhạc nền BGM nếu bật)
         final_name = f"news_{job_id}.mp4"
         final_path = os.path.join(job_dir, final_name)
+
+        bgm_to_use = DEFAULT_BGM_PATH if (req.use_bgm and os.path.exists(DEFAULT_BGM_PATH)) else None
 
         render_full_video(
             scenes=req.scenes,
@@ -84,6 +126,8 @@ async def render_video(req: RenderRequest):
             tts_results=tts_results,
             work_dir=job_dir,
             final_output_path=final_path,
+            bgm_path=bgm_to_use,
+            bgm_volume=req.bgm_volume,
         )
 
         return {"success": True, "video_url": f"/outputs/{job_id}/{final_name}"}
