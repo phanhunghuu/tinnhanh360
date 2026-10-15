@@ -82,37 +82,76 @@ def parse_article_to_scenes(
         "motion": "zoom_in",
     })
 
-    # Thu thập tất cả các câu từ bài báo cho các frame chi tiết
+    # Thu thập tất cả các câu từ bài báo
     all_sentences = []
     for p in paragraphs:
         sents = _split_into_sentences(p)
         all_sentences.extend(sents)
 
-    # Nếu số câu ít quá, gộp thành 2-3 câu
-    # Mỗi câu làm 1 frame chi tiết để phụ đề vừa vặn và chạy khớp hoàn hảo với voice
-    headlines_cycle = [
-        "DIỄN BIẾN VỤ VIỆC",
-        "TÌNH TIẾT VỤ ÁN",
-        "PHÁN QUYẾT CỦA TÒA ÁN",
-        "KẾT QUẢ XỬ LÝ",
-        "THÔNG TIN BỔ SUNG"
+    # ── THUẬT TOÁN TÓM TẮT THÔNG MINH (Smart News Summarizer) ──
+    # Lọc bỏ câu rác, câu phụ bàn nhậu, câu dẫn linh tinh
+    # Ưu tiên các câu chứa thông tin cốt lõi: Ai, Làm gì, Hậu quả gì, Bị bắt/Phạt thế nào
+    KEYWORDS_CORE = [
+        "khởi tố", "bắt tạm giam", "tuyên phạt", "án tù", "tử vong", "bị cáo",
+        "hđxx", "hành vi", "cơ quan điều tra", "xác định", "kết luận",
+        "thiệt hại", "hàng giả", "buôn bán", "sản xuất", "tang vật",
+        "vụ án", "nạn nhân", "nguyên nhân", "bồi thường"
+    ]
+    KEYWORDS_DISCARD = [
+        "bàn nhậu", "uống rượu", "lời qua tiếng lại", "quê ở", "sinh năm",
+        "sau khi uống", "tiếp tục nhậu", "ngồi uống", "ảnh:", "nguồn:"
     ]
 
-    # Giới hạn tối đa khoảng 4-5 frame chi tiết để video súc tích, vừa vặn 30-60s
-    selected_sents = all_sentences[:5]
-    if not selected_sents and len(paragraphs) > 1:
-        selected_sents = [paragraphs[1]]
+    scored_sents = []
+    for idx, sent in enumerate(all_sentences):
+        s_lower = sent.lower()
+        # Bỏ qua câu quá ngắn hoặc quá dài
+        if len(sent) < 35 or len(sent) > 220:
+            continue
+
+        score = 0
+        # Câu mở đầu đoạn thường chứa ý chính
+        if idx in [0, 1]:
+            score += 3
+        # Điểm cộng cho từ khóa cốt lõi thời sự
+        for kw in KEYWORDS_CORE:
+            if kw in s_lower:
+                score += 2
+        # Điểm trừ cho chi tiết vụn vặt
+        for kw in KEYWORDS_DISCARD:
+            if kw in s_lower:
+                score -= 3
+
+        scored_sents.append((score, idx, sent))
+
+    # Sắp xếp lấy 3 - 4 câu điểm cao nhất nhưng giữ nguyên thứ tự diễn biến thời gian (theo idx)
+    scored_sents.sort(key=lambda x: x[0], reverse=True)
+    top_candidates = scored_sents[:4]
+    # Sắp xếp lại theo trình tự thời gian ban đầu của bài báo
+    top_candidates.sort(key=lambda x: x[1])
+
+    selected_sents = [item[2] for item in top_candidates]
+    if not selected_sents:
+        selected_sents = all_sentences[:3]
+
+    headlines_cycle = [
+        "DIỄN BIẾN VỤ VIỆC",
+        "KẾT QUẢ ĐIỀU TRA",
+        "PHÁN QUYẾT CỦA TÒA ÁN",
+        "HẬU QUẢ VỤ VIỆC",
+    ]
 
     for i, sent in enumerate(selected_sents):
         hl = headlines_cycle[i % len(headlines_cycle)]
-        # Tự động gán headline thông minh dựa trên nội dung câu
         s_lower = sent.lower()
         if any(k in s_lower for k in ["tuyên phạt", "tháng tù", "năm tù", "bồi thường", "hđxx", "phán quyết"]):
             hl = "PHÁN QUYẾT CỦA TÒA ÁN"
+        elif any(k in s_lower for k in ["khởi tố", "bắt tạm giam", "khám xét", "thu giữ", "tang vật"]):
+            hl = "KẾT QUẢ ĐIỀU TRA"
         elif any(k in s_lower for k in ["sáng", "ngày", "chiều", "lái xe", "va chạm", "tông", "lấn sang"]):
             hl = "DIỄN BIẾN VỤ VIỆC"
-        elif any(k in s_lower for k in ["xác định", "kết luận", "nguyên nhân", "lỗi", "giảm nhẹ"]):
-            hl = "KẾT LUẬN ĐIỀU TRA"
+        elif any(k in s_lower for k in ["hậu quả", "tử vong", "thiệt hại", "hàng giả"]):
+            hl = "HẬU QUẢ VỤ VIỆC"
 
         scenes.append({
             "id": len(scenes) + 1,
