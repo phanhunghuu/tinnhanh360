@@ -73,24 +73,18 @@ def parse_article_to_scenes(
     scenes = []
 
     # 1. FRAME 1: Title Hero (Tiêu đề bài viết GIỮ NGUYÊN ĐẦY ĐỦ 100%)
-    # Lời đọc mở đầu lấy câu đầu tiên của bài báo
-    lead_sents = _split_into_sentences(paragraphs[0])
-    lead_text = lead_sents[0] if lead_sents else title
+    # Lời đọc chỉ đọc đúng tiêu đề bài báo
     scenes.append({
         "id": 1,
         "type": "title_hero",
         "headline": title,  # Giữ trọn vẹn 100% tiêu đề gốc!
-        "text": lead_text,
+        "text": title,      # Chỉ đọc tiêu đề bài báo, không thừa câu khác
         "motion": "zoom_in",
     })
 
-    # Thu thập tất cả các câu từ các đoạn văn tiếp theo
+    # Thu thập tất cả các câu từ bài báo cho các frame chi tiết
     all_sentences = []
-    # Nếu đoạn đầu có nhiều hơn 1 câu, lấy các câu tiếp theo vào chi tiết
-    if len(lead_sents) > 1:
-        all_sentences.extend(lead_sents[1:])
-
-    for p in paragraphs[1:]:
+    for p in paragraphs:
         sents = _split_into_sentences(p)
         all_sentences.extend(sents)
 
@@ -156,7 +150,7 @@ def _gemini_generate_scenes(title, content, source, duration, api_key) -> list:
         client = genai.Client(api_key=api_key)
         prompt = f"""Bạn là biên tập viên video tin tức TikTok chuyên nghiệp.
 Hãy phân tích bài báo sau và tạo danh sách các scenes cho video thời sự dọc 9:16 ({duration} giây) theo đúng cấu trúc:
-1. Scene 1: type="title_hero", headline="{title}" (giữ đầy đủ 100% tiêu đề bài báo, không được cắt ngắn), text="Lời dẫn mở đầu ngắn gọn".
+1. Scene 1: type="title_hero", headline="{title}" (giữ đầy đủ 100% tiêu đề bài báo, không được cắt ngắn), text="{title}" (CHỈ đọc đúng tiêu đề bài báo, không thêm câu dẫn nào khác).
 2. Các Scene chi tiết: type="news_detail", mỗi scene là MỘT CÂU TRỌN VẸN duy nhất ngắn gọn dễ đọc, headline là cụm từ ngắn gọn (DIỄN BIẾN VỤ VIỆC, PHÁN QUYẾT CỦA TÒA ÁN...).
 3. Scene cuối cùng: type="follow", headline="THEO DÕI ĐỂ XEM THÊM", text="Bấm theo dõi kênh để cập nhật nhiều tin hot."
 

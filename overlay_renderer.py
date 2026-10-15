@@ -259,12 +259,16 @@ def make_title_hero_overlay(
     draw = ImageDraw.Draw(canvas)  # refresh sau alpha_composite
     _draw_source_pill(draw, source, top=110, left=80)
 
-    # 4. Gradient đen phía dưới (bắt đầu từ 52% màn hình - dưới khung ảnh)
-    grad_start = int(H * 0.52)
+    # 4. Gradient đen mờ dần từ dưới lên (0% ở đáy khung ảnh -> 100% ở đáy màn hình)
+    grad_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    g_draw = ImageDraw.Draw(grad_layer)
+    grad_start = inset["y"] + inset["h"]  # Bắt đầu ngay tại đáy khung ảnh
     for y_pos in range(grad_start, H):
         factor = (y_pos - grad_start) / (H - grad_start)
-        alpha = int(min(240, 255 * (factor ** 1.1)))
-        draw.line([(0, y_pos), (W, y_pos)], fill=(0, 0, 0, alpha))
+        alpha = int(255 * (factor ** 0.85))
+        g_draw.line([(0, y_pos), (W, y_pos)], fill=(0, 0, 0, alpha))
+    canvas.alpha_composite(grad_layer)
+    draw = ImageDraw.Draw(canvas)
 
     # 5. Tiêu đề Inter-Black 900
     font_size = 62
