@@ -21,3 +21,6 @@ test_output/
 # File hệ điều hành
 .DS_Store
 Thumbs.db
+.env
+server.log
+*.wav

@@ -60,8 +60,27 @@ def parse_article_to_scenes(
     content = article.get("content", "")
     source  = article.get("source", "Tin tức")
 
+    # Mặc định dùng Groq AI (miễn phí, siêu nhanh và tóm tắt cực thông minh)
+    groq_key = api_key if (api_key and api_key.startswith("gsk_")) else None
+    if not groq_key:
+        groq_key = os.getenv("GROQ_API_KEY")
+    if not groq_key and os.path.exists(".env"):
+        try:
+            with open(".env", "r", encoding="utf-8") as ef:
+                for line in ef:
+                    if line.startswith("GROQ_API_KEY="):
+                        groq_key = line.split("=", 1)[1].strip().strip('"\'')
+        except Exception:
+            pass
+
+    # Ưu tiên Groq AI
+    if groq_key:
+        scenes = _groq_generate_scenes(title, content, source, duration_seconds, groq_key)
+        if scenes:
+            return {"title": title, "source": source, "images": article.get("images", []), "scenes": scenes}
+
     # Nếu có API key Gemini
-    if api_key:
+    if api_key and not api_key.startswith("gsk_"):
         scenes = _gemini_generate_scenes(title, content, source, duration_seconds, api_key)
         if scenes:
             return {"title": title, "source": source, "images": article.get("images", []), "scenes": scenes}
@@ -185,6 +204,108 @@ def parse_article_to_scenes(
         "images": article.get("images", []),
         "scenes": scenes,
     }
+
+
+def _groq_generate_scenes(title: str, content: str, source: str, duration: int, api_key: str) -> list:
+    """Dùng Groq AI (qwen/qwen3.8-27b hoặc openai/gpt-oss-120b) tạo kịch bản video thời sự kịch tính và logic."""
+    import urllib.request
+    import ssl
+
+    prompt = f"""Bạn là biên tập viên tin tức video thời sự chuyên nghiệp.
+Hãy phân tích bài báo sau và tạo kịch bản video TikTok 9:16 thật hấp dẫn, kịch tính, mạch lạc, nêu đầy đủ cốt truyện chính:
+Mâu thuẫn -> Diễn biến gây án -> Hậu quả/Nạn nhân tử vong -> Khởi tố bắt giam.
+
+BẮT BUỘC trả về đúng định dạng JSON Array các đối tượng sau (KHÔNG dùng markdown ```json, CHỈ xuất JSON thuần):
+[
+  {{
+    "id": 1,
+    "type": "title_hero",
+    "headline": "{title}",
+    "text": "{title}",
+    "motion": "zoom_in"
+  }},
+  {{
+    "id": 2,
+    "type": "news_detail",
+    "headline": "MÂU THUẪN GÂY GỔ",
+    "text": "1 câu tóm tắt mâu thuẫn dẫn đến việc xô xát.",
+    "motion": "pan"
+  }},
+  {{
+    "id": 3,
+    "type": "news_detail",
+    "headline": "HÀNH VI GÂY ÁN",
+    "text": "1 câu tóm tắt hành vi gây án nguy hiểm và hậu quả.",
+    "motion": "zoom_out"
+  }},
+  {{
+    "id": 4,
+    "type": "news_detail",
+    "headline": "KẾT QUẢ ĐIỀU TRA",
+    "text": "1 câu tóm tắt việc cơ quan công an khởi tố bắt giữ.",
+    "motion": "pan"
+  }},
+  {{
+    "id": 5,
+    "type": "follow",
+    "headline": "THEO DÕI ĐỂ XEM THÊM",
+    "text": "Bấm theo dõi kênh để cập nhật liên tục các tin tức nóng nhất.",
+    "motion": "static"
+  }}
+]
+
+QUY TẮC CẦN TUÂN THỦ TUYỆT ĐỐI:
+1. Scene 1: type="title_hero", headline và text bắt buộc giữ nguyên 100% tiêu đề bài báo gốc, không cắt bớt!
+2. Mỗi Scene news_detail chỉ gồm DUY NHẤT 1 CÂU HOÀN CHỈNH, ngắn gọn, súc tích (18-35 từ), nêu đúng thông tin cốt lõi, loại bỏ các chi tiết vụn vặt như ăn nhậu ai nói qua nói lại.
+3. Scene cuối cùng bắt buộc là follow.
+
+BÀI BÁO:
+Tiêu đề: {title}
+Nguồn: {source}
+Nội dung: {content[:3500]}
+"""
+
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
+    models_to_try = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b"]
+    for model in models_to_try:
+        try:
+            req = urllib.request.Request(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                    "User-Agent": "curl/8.7.1"
+                },
+                data=json.dumps({
+                    "model": model,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.2
+                }).encode("utf-8")
+            )
+            with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                raw = data["choices"][0]["message"]["content"].strip()
+                raw = re.sub(r'^```json\s*', '', raw)
+                raw = re.sub(r'^```\s*', '', raw)
+                raw = re.sub(r'```$', '', raw).strip()
+                scenes = json.loads(raw)
+                if isinstance(scenes, list) and len(scenes) >= 3:
+                    print(f"Groq successfully generated {len(scenes)} scenes using {model}")
+                    # Chuẩn hóa ID
+                    for i, sc in enumerate(scenes, 1):
+                        sc["id"] = i
+                        if i == 1:
+                            sc["headline"] = title
+                            sc["text"] = title
+                    return scenes
+        except Exception as e:
+            print(f"Groq model {model} failed: {e}")
+            continue
+
+    return []
 
 
 def _gemini_generate_scenes(title, content, source, duration, api_key) -> list:
