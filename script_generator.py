@@ -212,18 +212,18 @@ def _groq_generate_scenes(title: str, content: str, source: str, duration: int, 
     import ssl
 
     prompt = f"""Bạn là biên tập viên tin tức video thời sự TikTok chuyên nghiệp.
-Hãy phân tích nội dung và thể loại của bài báo sau (Thời sự Quốc tế, Chiến sự - Quân sự, Kinh tế - Thị trường, Xã hội, Tai nạn - Cứu nạn, Pháp luật, Thể thao, Công nghệ, v.v.).
-Sau đó tạo kịch bản video TikTok 9:16 gồm 4-6 scenes thật hấp dẫn, kịch tính, mạch lạc theo đúng dòng thời gian thực tế:
+Hãy phân tích bài báo sau và tạo kịch bản video TikTok 9:16 gồm 4-6 scenes thật mạch lạc, gãy gọn theo đúng cấu trúc tiêu chuẩn nghiệp vụ báo chí.
 
-1. Scene 1: type="title_hero", headline="{title}", text="{title}" (Bắt buộc giữ nguyên 100% tiêu đề gốc bài báo, không cắt bớt).
-2. Các Scene chi tiết: type="news_detail", mỗi scene là 1 câu trọn vẹn (18-35 từ).
-   - BẮT BUỘC Scene đầu tiên của news_detail phải nêu bối cảnh (ai, ở đâu, khi nào, chuyện gì xảy ra).
-   - QUY TẮC ĐẶT TIÊU ĐỀ HEADLINE: Phải viết HOA, ngắn gọn (2-5 từ), đặt thật sát và biến hóa linh hoạt theo thể loại và diễn biến thực tế của bài báo. TUYỆT ĐỐI KHÔNG dùng rập khuôn từ "HÀNH VI GÂY ÁN" hay "KHỞI TỐ" cho tin không phải án mạng/hình sự!
-     * Tin Chiến sự / Quân sự / Quốc tế: DIỄN BIẾN ĐỘT KÍCH, TẤN CÔNG BẰNG TÊN LỬA, THIỆT HẠI THỰC TẾ, TUYÊN BỐ NHẬN TRÁCH NHIỆM, PHẢN ỨNG QUỐC TẾ, BIỆN PHÁP ĐÁP TRẢ...
-     * Tin Kinh tế / Tài chính: BIẾN ĐỘNG THỊ TRƯỜNG, TÁC ĐỘNG GIÁ DẦU, CHÍNH SÁCH MỚI, PHÂN TÍCH CHUYÊN GIA...
-     * Tin Thiên tai / Tai nạn: HIỆN TRƯỜNG SỰ CỐ, CÔNG TÁC CỨU HỘ, THỐNG KÊ THIỆT HẠI, NGUYÊN NHÂN BAN ĐẦU...
-     * Tin Pháp luật / Trọng án: BỐI CẢNH MÂU THUẪN, HÀNH VI GÂY ÁN, KẾT QUẢ ĐIỀU TRA...
-3. Scene cuối cùng: type="follow", headline="THEO DÕI ĐỂ XEM THÊM", text="Bấm theo dõi kênh để cập nhật liên tục các tin tức nóng nhất."
+QUY TẮC BẮT BUỘC VỀ HEADLINE (CHỈ ĐƯỢC DÙNG CÁC HEADLINE SAU ĐÂY):
+1. Scene 1: type="title_hero", headline="{title}", text="{title}" (Giữ nguyên 100% tiêu đề gốc bài báo, không cắt bớt).
+2. Scene 2: type="news_detail", headline="BỐI CẢNH VỤ VIỆC", text=1 câu nêu rõ thời gian, địa điểm, hoàn cảnh khởi nguồn sự việc (ai, ở đâu, khi nào).
+3. Scene 3 & 4 (có thể có 2-3 frame): type="news_detail", headline="DIỄN BIẾN VỤ VIỆC", text=mỗi frame là 1 câu nêu diễn biến tiếp theo của sự việc.
+4. Scene áp chót: type="news_detail", headline="KẾT QUẢ" (hoặc "KẾT LUẬN"), text=1 câu nêu kết quả xử lý, hậu quả, hoặc thông báo chính thức cuối cùng.
+5. Scene cuối: type="follow", headline="THEO DÕI ĐỂ XEM THÊM", text="Bấm theo dõi kênh để cập nhật liên tục các tin tức nóng nhất."
+
+TUYỆT ĐỐI TUÂN THỦ:
+- CHỈ sử dụng đúng 3 loại tiêu đề trên cho các frame chi tiết: "BỐI CẢNH VỤ VIỆC", "DIỄN BIẾN VỤ VIỆC" và "KẾT QUẢ" (hoặc "KẾT LUẬN"). Không tự ý bịa thêm tiêu đề lạ khác.
+- Mỗi câu ngắn gọn, dứt khoát, chuẩn phong cách bản tin thời sự 60 giây.
 
 BẮT BUỘC trả về đúng định dạng JSON Array các đối tượng sau (KHÔNG dùng markdown ```json, CHỈ xuất JSON thuần):
 [
@@ -237,19 +237,33 @@ BẮT BUỘC trả về đúng định dạng JSON Array các đối tượng sa
   {{
     "id": 2,
     "type": "news_detail",
-    "headline": "TIÊU ĐỀ IN HOA SÁT NỘI DUNG",
+    "headline": "BỐI CẢNH VỤ VIỆC",
     "text": "1 câu nêu rõ bối cảnh ban đầu.",
     "motion": "pan"
   }},
   {{
     "id": 3,
     "type": "news_detail",
-    "headline": "TIÊU ĐỀ IN HOA THEO DIỄN BIẾN",
+    "headline": "DIỄN BIẾN VỤ VIỆC",
     "text": "1 câu nêu diễn biến tiếp theo.",
     "motion": "zoom_out"
   }},
   {{
     "id": 4,
+    "type": "news_detail",
+    "headline": "DIỄN BIẾN VỤ VIỆC",
+    "text": "1 câu nêu tình tiết hoặc thiệt hại tiếp theo.",
+    "motion": "pan"
+  }},
+  {{
+    "id": 5,
+    "type": "news_detail",
+    "headline": "KẾT QUẢ",
+    "text": "1 câu kết quả vụ việc hoặc phản ứng đáp trả.",
+    "motion": "zoom_out"
+  }},
+  {{
+    "id": 6,
     "type": "follow",
     "headline": "THEO DÕI ĐỂ XEM THÊM",
     "text": "Bấm theo dõi kênh để cập nhật liên tục các tin tức nóng nhất.",
