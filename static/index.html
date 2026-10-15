@@ -163,6 +163,36 @@
           <input id="geminiKey" type="text" placeholder="Dán key Groq (gsk_...) hoặc để trống dùng key từ hệ thống">
         </div>
       </div>
+      <!-- KHU VỰC NHẠC NỀN BGM (UPLOAD & TÙY CHỈNH ÂM LƯỢNG) - LUÔN HIỂN THỊ -->
+      <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px 16px; margin: 16px 0;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
+          <div style="font-weight: 600; font-size: 14px; color: #f1f5f9; display:flex; align-items:center; gap:8px;">
+            🎵 Nhạc Nền Mặc Định (BGM)
+            <span id="bgmBadge" style="font-size:11px; padding:2px 8px; border-radius:12px; background:rgba(239,68,68,0.2); color:#fca5a5;">Chưa có</span>
+          </div>
+          <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer; color:#94a3b8;">
+            <input type="checkbox" id="bgmToggle" checked onchange="updateBgmState()"> Bật nhạc nền
+          </label>
+        </div>
+
+        <div class="row2" style="align-items:center;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label style="font-size:12px;">Tải lên file MP3 (Lưu dùng mãi mãi cho mọi video):</label>
+            <input type="file" id="bgmFileInput" accept=".mp3,audio/mpeg,audio/wav" style="font-size:12px; padding:6px 10px;" onchange="uploadBgmFile(this)">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <label style="font-size:12px;">Âm lượng nhạc nền:</label>
+              <span id="bgmVolLabel" style="font-size:12px; font-weight:700; color:#38bdf8;">15%</span>
+            </div>
+            <input type="range" id="bgmVolumeSlider" min="1" max="100" value="15" style="width:100%; accent-color:#38bdf8; cursor:pointer;" oninput="document.getElementById('bgmVolLabel').innerText = this.value + '%'">
+          </div>
+        </div>
+        <div id="bgmNotice" style="font-size:11px; color:#94a3b8; margin-top:8px;">
+          💡 Chỉ cần upload 1 lần, hệ thống sẽ lưu file MP3 vĩnh viễn và tự động lặp (loop) làm nền cho tất cả video.
+        </div>
+      </div>
+
       <button class="btn btn-parse" id="btnParse" onclick="parseArticle()">
         <span id="parseIcon">⚡</span>
         <span id="parseText">Phân Tích Bài & Chuẩn Bị Kịch Bản</span>
@@ -195,36 +225,6 @@
           <div class="form-group">
             <label>Zalo AI Key:</label>
             <input id="zaloKey" type="text" value="c6B974D16LbRHcSR1hRGGswtXV0LUOr6" placeholder="Nhập Zalo AI API Key">
-          </div>
-        </div>
-
-        <!-- KHU VỰC NHẠC NỀN BGM (UPLOAD & TÙY CHỈNH ÂM LƯỢNG) -->
-        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px 16px; margin: 18px 0;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
-            <div style="font-weight: 600; font-size: 14px; color: #f1f5f9; display:flex; align-items:center; gap:8px;">
-              🎵 Nhạc Nền Video (BGM)
-              <span id="bgmBadge" style="font-size:11px; padding:2px 8px; border-radius:12px; background:rgba(239,68,68,0.2); color:#fca5a5;">Chưa có</span>
-            </div>
-            <label style="display:flex; align-items:center; gap:6px; font-size:12px; cursor:pointer; color:#94a3b8;">
-              <input type="checkbox" id="bgmToggle" checked onchange="updateBgmState()"> Bật nhạc nền
-            </label>
-          </div>
-
-          <div class="row2" style="align-items:center;">
-            <div class="form-group" style="margin-bottom:0;">
-              <label style="font-size:12px;">Tải lên file MP3 mới (Lưu dùng cho mọi video):</label>
-              <input type="file" id="bgmFileInput" accept=".mp3,audio/mpeg,audio/wav" style="font-size:12px; padding:6px 10px;" onchange="uploadBgmFile(this)">
-            </div>
-            <div class="form-group" style="margin-bottom:0;">
-              <div style="display:flex; justify-content:space-between; align-items:center;">
-                <label style="font-size:12px;">Âm lượng nhạc nền:</label>
-                <span id="bgmVolLabel" style="font-size:12px; font-weight:700; color:#38bdf8;">15%</span>
-              </div>
-              <input type="range" id="bgmVolumeSlider" min="1" max="100" value="15" style="width:100%; accent-color:#38bdf8; cursor:pointer;" oninput="document.getElementById('bgmVolLabel').innerText = this.value + '%'">
-            </div>
-          </div>
-          <div id="bgmNotice" style="font-size:11px; color:#94a3b8; margin-top:8px;">
-            💡 File MP3 tải lên sẽ được lưu vĩnh viễn trên máy chủ, tự động lặp (loop) và mix êm dưới giọng đọc.
           </div>
         </div>
 
