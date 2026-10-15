@@ -174,7 +174,7 @@ def make_title_hero_overlay(
 ):
     """
     Overlay Frame 1 (Tiêu đề bài viết kèm hình):
-    - Mảng shadow màu đen được kéo cao lên (từ 35% màn hình) để tiêu đề hiện cực kỳ rõ nét.
+    - Mảng shadow đen được kéo rất cao lên (từ 25% màn hình) để tiêu đề hiện cực kỳ rõ nét.
     - Tiêu đề in đậm nhất (Font Inter-Black 900).
     - Hiển thị trọn vẹn 100% nội dung tiêu đề, không cắt bớt chữ nào.
     - Giảm giãn cách dòng (line_spacing) gọn gàng.
@@ -186,8 +186,8 @@ def make_title_hero_overlay(
     # Chọn logo đỏ trên nền sáng, logo trắng trên nền tối
     is_light = detect_is_light_bg(bg_image_path, "top_right") if bg_image_path else False
 
-    # 1. Mảng shadow đen kéo cao lên (bắt đầu từ 35% màn hình thay vì 45%) để che tối nền và tôn rõ chữ
-    grad_start = int(H * 0.35)
+    # 1. Mảng shadow đen kéo rất cao lên (bắt đầu từ 25% màn hình) để che tối nền và tôn rõ chữ
+    grad_start = int(H * 0.25)
     for y in range(grad_start, H):
         factor = (y - grad_start) / (H - grad_start)
         alpha = int(min(250, 255 * (factor ** 1.15)))

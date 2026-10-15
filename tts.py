@@ -1,6 +1,6 @@
 """
 TTS Module - Thu thập audio + sentence timestamps từ Edge-TTS
-Được cấu hình tốc độ đọc tăng lên x1.5 (rate="+50%") theo yêu cầu người dùng.
+Được cấu hình tốc độ đọc rate="+30%" theo yêu cầu người dùng.
 """
 import asyncio
 import edge_tts
@@ -9,7 +9,7 @@ import os
 import concurrent.futures
 
 
-async def _stream_tts(text: str, voice: str, audio_path: str, rate: str = "+50%") -> list:
+async def _stream_tts(text: str, voice: str, audio_path: str, rate: str = "+30%") -> list:
     """
     Stream edge-tts, ghi audio ra file và thu thập SentenceBoundary timestamps.
     Returns: list of {"text", "start", "end"} - seconds
@@ -38,9 +38,9 @@ def _run_in_thread(coro):
         return future.result()
 
 
-def generate_tts(text: str, voice: str, audio_path: str, rate: str = "+50%") -> dict:
+def generate_tts(text: str, voice: str, audio_path: str, rate: str = "+30%") -> dict:
     """
-    Chạy TTS tốc độ x1.5 (+50%) - an toàn dù gọi từ trong FastAPI async context.
+    Chạy TTS tốc độ +30% - an toàn dù gọi từ trong FastAPI async context.
     Returns: {"audio_path", "duration", "sentences": [...]}
     """
     boundaries = _run_in_thread(_stream_tts(text, voice, audio_path, rate=rate))

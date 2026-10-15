@@ -63,13 +63,30 @@ def extract_article_content(url_or_text: str):
         if og_img and og_img.get("content"):
             images.append(og_img["content"])
             
+        # Lấy tất cả hình trong bài viết - ưu tiên hình lớn (có khả năng là hình nội dung)
         for img in soup.find_all("img"):
-            src = img.get("src") or img.get("data-src")
-            if src and src.startswith("http") and not any(ext in src.lower() for ext in ['.svg', '.ico', 'logo', 'avatar']):
-                if src not in images:
-                    images.append(src)
-                if len(images) >= 5:
-                    break
+            src = img.get("src") or img.get("data-src") or img.get("data-lazy-src") or img.get("data-original")
+            if not src:
+                continue
+            # Chỉ lấy URL tuyệt đối
+            if not src.startswith("http"):
+                continue
+            # Loại bỏ icon, logo, avatar, banner nhỏ
+            skip_keywords = ['.svg', '.ico', 'logo', 'avatar', 'icon', 'banner', 'sprite', 'button', 'ads', 'advertis']
+            if any(kw in src.lower() for kw in skip_keywords):
+                continue
+            # Kiểm tra kích thước nếu có attribute width/height - chỉ lấy hình > 200px
+            w_attr = img.get("width", "")
+            h_attr = img.get("height", "")
+            try:
+                if w_attr and int(str(w_attr).replace("px","")) < 200:
+                    continue
+                if h_attr and int(str(h_attr).replace("px","")) < 150:
+                    continue
+            except Exception:
+                pass
+            if src not in images:
+                images.append(src)
 
     text_content = trafilatura.extract(html, include_comments=False, include_tables=False) if html else None
     if not text_content:
