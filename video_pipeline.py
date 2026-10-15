@@ -1,8 +1,15 @@
 """
-Video Pipeline - Dựng từng scene theo bố cục chính xác:
-1. Frame 1 (title_hero): Background ảnh bài báo zoompan liên tục + overlay tiêu đề lớn, vạch đỏ, nguồn, logo (đỏ/trắng tự động), ngày đăng.
-2. Các Frame chi tiết (news_detail): Render frame ảnh chi tiết tĩnh (nền mờ + ảnh bài báo inset bo tròn + badge đỏ + text nội dung to + logo trắng + ngày đăng), hoặc áp dụng chuyển động zoompan nhẹ.
-3. Frame kết (follow): Nền đen tĩnh + logo TIN 360 NHANH trắng + nút FOLLOW + kêu gọi theo dõi.
+Video Pipeline - Dựng video tin tức với hiệu ứng zoom/pan BÊN TRONG khung ảnh bo tròn.
+
+KIẾN TRÚC:
+- Overlay renderer tạo PNG (RGBA) có "lỗ trống" bo tròn tại vị trí inset.
+- FFmpeg zoompan ảnh gốc tại kích thước inset, pad ra 1080x1920 tại đúng vị trí.
+- Overlay PNG đè lên trên → ảnh chỉ hiện qua lỗ trống = zoom/pan trong khung.
+
+Các loại frame:
+1. title_hero: Zoompan trong khung + overlay title
+2. news_detail: Zoompan trong khung + overlay subtitle
+3. follow: Static (không có khung ảnh)
 """
 
 import os
@@ -60,71 +67,92 @@ def _make_solid_bg(path: str):
     ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-def _build_zoompan_filter(motion: str, fps: int, num_frames: int) -> str:
+def _build_inset_zoompan_filter(motion: str, fps: int, num_frames: int, out_w: int, out_h: int) -> str:
     """
-    Tạo ffmpeg zoompan filter cho toàn bộ duration.
-    Đảm bảo 9:16 và setsar=1 không biến dạng.
+    Tạo FFmpeg filter: zoompan ảnh gốc → output tại kích thước khung inset.
+    Ảnh được scale 2x lớn hơn inset để có headroom cho zoom/pan.
     """
     d = num_frames
-    base_prep = "scale='if(gt(a,2160/3840),-2,2160)':'if(gt(a,2160/3840),3840,-2)',crop=2160:3840,setsar=1"
+    prep_w = out_w * 2
+    prep_h = out_h * 2
+
+    # Scale ảnh lấp đầy prep size (cover), rồi crop chính xác
+    base_prep = (
+        f"scale={prep_w}:{prep_h}:force_original_aspect_ratio=increase,"
+        f"crop={prep_w}:{prep_h},setsar=1"
+    )
 
     if motion == "zoom_in":
         return (
             f"{base_prep},"
-            f"zoompan=z='min(1+on*0.0008,1.20)'"
+            f"zoompan=z='min(1+on*0.0006,1.15)'"
             f":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
-            f":d={d}:s=1080x1920:fps={fps},"
-            f"setsar=1"
+            f":d={d}:s={out_w}x{out_h}:fps={fps}"
         )
     elif motion == "zoom_out":
         return (
             f"{base_prep},"
-            f"zoompan=z='max(1.20-on*0.0008,1.0)'"
+            f"zoompan=z='max(1.15-on*0.0006,1.0)'"
             f":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
-            f":d={d}:s=1080x1920:fps={fps},"
-            f"setsar=1"
+            f":d={d}:s={out_w}x{out_h}:fps={fps}"
         )
     elif motion == "pan":
         return (
             f"{base_prep},"
-            f"zoompan=z='1.12'"
-            f":x='(iw-iw/zoom)/2 + (iw-iw/zoom)*on/{d}/2'"
+            f"zoompan=z='1.08'"
+            f":x='(iw-iw/zoom)/2 + (iw-iw/zoom)*on/{d}/3'"
             f":y='ih/2-(ih/zoom/2)'"
-            f":d={d}:s=1080x1920:fps={fps},"
-            f"setsar=1"
+            f":d={d}:s={out_w}x{out_h}:fps={fps}"
         )
     else:  # static
-        return "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1"
+        return (
+            f"scale={out_w}:{out_h}:force_original_aspect_ratio=decrease,"
+            f"pad={out_w}:{out_h}:(ow-iw)/2:(oh-ih)/2,setsar=1"
+        )
 
 
 def render_scene_clip(
-    bg_image: str,
+    photo_path: str,
     audio_path: str,
     duration: float,
     motion: str,
     overlay_path: Optional[str],
     output_path: str,
+    inset: Optional[dict] = None,
     fps: int = 24,
 ):
     """
     Dựng 1 scene clip:
-    - Nếu có overlay_path (như Frame 1): Zoompan bg_image + overlay tĩnh lên trên.
-    - Nếu không có overlay_path (bg_image đã là ảnh hoàn chỉnh như Frame 2 hoặc Frame 3): Tạo video tĩnh hoặc zoom cực nhẹ.
+    - Nếu có overlay_path + inset: Zoompan ảnh BÊN TRONG khung bo tròn.
+      FFmpeg: zoompan photo → pad vào vị trí inset → overlay PNG (có lỗ trống) lên trên.
+    - Nếu không có overlay_path: Video tĩnh từ ảnh đã render (Follow frame).
     """
     num_frames = int(duration * fps) + 2
 
-    if overlay_path:
-        # Trường hợp Frame 1: ảnh nền di chuyển, overlay chữ đứng yên
-        zoompan = _build_zoompan_filter(motion, fps, num_frames)
+    if overlay_path and inset:
+        # ── ZOOMPAN TRONG KHUNG INSET ──
+        ix = inset["x"]
+        iy = inset["y"]
+        iw = inset["w"]
+        ih = inset["h"]
+
+        zoompan = _build_inset_zoompan_filter(motion, fps, num_frames, iw, ih)
+
+        # Filter complex:
+        # [0] = ảnh gốc → zoompan tại kích thước inset → pad ra 1080x1920 tại vị trí inset
+        # [1] = overlay PNG (RGBA, có lỗ trống bo tròn) → đè lên trên
+        # Kết quả: ảnh chỉ hiện qua lỗ trống = zoom/pan trong khung
         filter_complex = (
-            f"[0:v]{zoompan}[bg];"
-            f"[bg][1:v]overlay=0:0,setsar=1[out]"
+            f"[0:v]{zoompan}[zpan];"
+            f"[zpan]pad=1080:1920:{ix}:{iy}:color=black[photo];"
+            f"[photo][1:v]overlay=0:0:format=auto,setsar=1[out]"
         )
+
         cmd = [
             "ffmpeg", "-y",
-            "-loop", "1", "-i", bg_image,
-            "-loop", "1", "-i", overlay_path,
-            "-i", audio_path,
+            "-loop", "1", "-i", photo_path,       # Ảnh gốc bài báo
+            "-loop", "1", "-i", overlay_path,      # Overlay PNG (RGBA, lỗ trống)
+            "-i", audio_path,                      # Audio
             "-filter_complex", filter_complex,
             "-map", "[out]", "-map", "2:a",
             "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
@@ -133,10 +161,10 @@ def render_scene_clip(
             output_path
         ]
     else:
-        # Trường hợp Frame 2 & Frame 3: ảnh đã render hoàn chỉnh, giữ khung hình 1080x1920 sắc nét
+        # ── FRAME TĨNH (Follow, hoặc fallback) ──
         cmd = [
             "ffmpeg", "-y",
-            "-loop", "1", "-i", bg_image,
+            "-loop", "1", "-i", photo_path,
             "-i", audio_path,
             "-vf", "scale=1080:1920,setsar=1",
             "-map", "0:v", "-map", "1:a",
@@ -148,7 +176,7 @@ def render_scene_clip(
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        raise RuntimeError(f"FFmpeg error:\n{result.stderr[-1000:]}")
+        raise RuntimeError(f"FFmpeg error:\n{result.stderr[-1500:]}")
 
     return output_path
 
@@ -164,20 +192,19 @@ def render_full_video(
 ):
     """
     Dựng hoàn chỉnh video từ các scene:
-    - Frame 1: Tiêu đề to + vạch đỏ + logo thích ứng (Hình 1)
-    - Frame 2, 3...: Chi tiết vụ việc với ảnh inset bo tròn + badge đỏ (Hình 2)
-    - Frame Cuối: Follow outro nền đen + nút Follow (Hình 3)
+    - Frame 1: Tiêu đề + ảnh trong khung bo tròn (zoompan trong khung)
+    - Frame 2, 3...: Chi tiết + ảnh trong khung bo tròn (zoompan trong khung)
+    - Frame Cuối: Follow outro tĩnh
     """
     os.makedirs(work_dir, exist_ok=True)
     date_str = get_current_date_str()
 
-    # Tải TẤT CẢ ảnh bài báo (không giới hạn) - ưu tiên dùng hết hình có trong bài
+    # Tải TẤT CẢ ảnh bài báo - dùng hết hình có trong bài, hoán đổi cho các frame
     bg_images = []
     for idx, url in enumerate(article_images):
         dest = os.path.join(work_dir, f"bg_{idx}.jpg")
         if download_file(url, dest):
             bg_images.append(dest)
-        # Giới hạn tối đa 15 hình để tránh quá tải
         if len(bg_images) >= 15:
             break
 
@@ -193,63 +220,66 @@ def render_full_video(
         motion   = scene.get("motion", "zoom_in")
         headline = scene.get("headline", "")
         text     = scene.get("text", "")
-        duration = tts["duration"] + 0.35  # Giữ trọn âm thanh cuối
+        duration = tts["duration"] + 0.35
 
         clip_out = os.path.join(work_dir, f"clip_{idx:02d}.mp4")
-        current_article_photo = bg_images[idx % len(bg_images)]
+        current_photo = bg_images[idx % len(bg_images)]
 
         if sc_type == "title_hero":
-            # FRAME 1 (Hình 1): Ảnh bài báo làm background zoompan, text overlay tĩnh
+            # FRAME 1: Overlay PNG (có lỗ trống) + zoompan trong khung
             ovl_path = os.path.join(work_dir, f"ovl_{idx:02d}_hero.png")
-            make_title_hero_overlay(
+            result = make_title_hero_overlay(
                 title=scene.get("headline", headline),
                 source=source_name,
                 date_str=date_str,
-                bg_image_path=current_article_photo,
+                bg_image_path=current_photo,
                 out_path=ovl_path
             )
             render_scene_clip(
-                bg_image=current_article_photo,
+                photo_path=current_photo,
                 audio_path=tts["audio_path"],
                 duration=duration,
                 motion=motion,
-                overlay_path=ovl_path,
+                overlay_path=result["overlay_path"],
                 output_path=clip_out,
+                inset=result["inset"],
                 fps=fps,
             )
 
         elif sc_type == "follow":
-            # FRAME CUỐI (Hình 3): Nền đen, Logo trắng ở giữa, Nút Follow, Kêu gọi theo dõi
+            # FRAME CUỐI: Tĩnh, không có khung ảnh
             follow_img_path = os.path.join(work_dir, f"frame_{idx:02d}_follow.jpg")
             create_follow_frame_image(follow_img_path)
             render_scene_clip(
-                bg_image=follow_img_path,
+                photo_path=follow_img_path,
                 audio_path=tts["audio_path"],
                 duration=duration,
                 motion="static",
                 overlay_path=None,
                 output_path=clip_out,
+                inset=None,
                 fps=fps,
             )
 
         else:
-            # CÁC FRAME CHI TIẾT (Hình 2): Nền mờ + Ảnh Inset bo tròn + Badge đỏ + Chữ lớn
-            detail_img_path = os.path.join(work_dir, f"frame_{idx:02d}_detail.jpg")
-            create_detail_frame_image(
-                article_photo_path=current_article_photo,
+            # FRAME CHI TIẾT: Overlay PNG (có lỗ trống) + zoompan trong khung
+            ovl_path = os.path.join(work_dir, f"ovl_{idx:02d}_detail.png")
+            result = create_detail_frame_image(
+                article_photo_path=current_photo,
                 headline_badge=headline or "DIỄN BIẾN VỤ VIỆC",
                 content_text=text,
                 source=source_name,
                 date_str=date_str,
-                out_path=detail_img_path
+                out_path=ovl_path
             )
             render_scene_clip(
-                bg_image=detail_img_path,
+                photo_path=current_photo,
                 audio_path=tts["audio_path"],
                 duration=duration,
-                motion="static",
-                overlay_path=None,
+                motion=motion,
+                overlay_path=result["overlay_path"],
                 output_path=clip_out,
+                inset=result["inset"],
                 fps=fps,
             )
 
