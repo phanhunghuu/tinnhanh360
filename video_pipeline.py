@@ -29,9 +29,13 @@ from overlay_renderer import (
 
 def download_file(url: str, dest: str) -> bool:
     try:
-        # Hỗ trợ cả file cục bộ
-        if os.path.exists(url):
-            img = Image.open(url)
+        # Hỗ trợ cả file cục bộ hoặc đường dẫn /outputs/...
+        local_path = url
+        if url.startswith("/outputs/"):
+            local_path = os.path.join(os.path.dirname(__file__), "outputs", url[9:])
+
+        if os.path.exists(local_path):
+            img = Image.open(local_path)
             rgb_img = img.convert("RGB")
             w, h = rgb_img.size
             if w < 1080 or h < 1080:
@@ -233,7 +237,19 @@ def render_full_video(
         duration = tts["duration"]
 
         clip_out = os.path.join(work_dir, f"clip_{idx:02d}.mp4")
-        current_photo = bg_images[idx % len(bg_images)]
+
+        # Cho phép người dùng chỉ định ảnh cụ thể cho từng scene (bằng url hoặc số index)
+        custom_img_url = scene.get("image_url")
+        if custom_img_url:
+            custom_dest = os.path.join(work_dir, f"scene_{idx:02d}_custom.jpg")
+            if download_file(custom_img_url, custom_dest):
+                current_photo = custom_dest
+            else:
+                current_photo = bg_images[idx % len(bg_images)]
+        elif "image_index" in scene and 0 <= int(scene["image_index"]) < len(bg_images):
+            current_photo = bg_images[int(scene["image_index"])]
+        else:
+            current_photo = bg_images[idx % len(bg_images)]
 
         if sc_type == "title_hero":
             # FRAME 1: Overlay PNG (có lỗ trống) + zoompan trong khung
@@ -312,10 +328,29 @@ def render_full_video(
         raw_concat_video
     ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    # Nếu có nhạc nền BGM -> Mix nhạc nền vào video với âm lượng bgm_volume
+    # Nếu có nhạc nền BGM -> Mix nhạc nền vào video với âm lượng bgm_volume VÀ FADE OUT KHÚC CUỐI
     if bgm_path and os.path.exists(bgm_path):
         vol = max(0.01, min(1.0, float(bgm_volume)))
-        filter_complex = f"[0:a]volume=1.0[voice];[1:a]volume={vol}[bgm];[voice][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]"
+        # Đo tổng thời lượng video để tính điểm bắt đầu fade out
+        try:
+            probe_out = subprocess.check_output([
+                "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1", raw_concat_video
+            ]).strip()
+            total_duration = float(probe_out)
+        except Exception:
+            total_duration = sum(t["duration"] for t in tts_results)
+
+        fade_len = min(2.5, total_duration / 3.0)
+        fade_start = max(0.0, total_duration - fade_len)
+
+        # Áp dụng filter afade out cho BGM
+        filter_complex = (
+            f"[0:a]volume=1.0[voice];"
+            f"[1:a]volume={vol},afade=t=out:st={fade_start:.2f}:d={fade_len:.2f}[bgm];"
+            f"[voice][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]"
+        )
+
         cmd_mix = [
             "ffmpeg", "-y",
             "-i", raw_concat_video,

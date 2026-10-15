@@ -66,6 +66,26 @@ async def upload_bgm(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.post("/api/upload-image")
+async def upload_image(file: UploadFile = File(...)):
+    """Upload ảnh riêng cho từng frame phân cảnh."""
+    try:
+        img_id = str(uuid.uuid4())[:8]
+        ext = os.path.splitext(file.filename)[1].lower() or ".jpg"
+        save_name = f"user_img_{img_id}{ext}"
+        save_path = os.path.join(OUTPUT_DIR, save_name)
+        content = await file.read()
+        with open(save_path, "wb") as f:
+            f.write(content)
+        return {
+            "success": True,
+            "url": f"/outputs/{save_name}",
+            "filename": file.filename
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.get("/api/bgm-status")
 def bgm_status():
     """Kiểm tra xem đã có nhạc nền mặc định chưa."""
