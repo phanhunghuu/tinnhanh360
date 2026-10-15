@@ -211,14 +211,19 @@ def _groq_generate_scenes(title: str, content: str, source: str, duration: int, 
     import urllib.request
     import ssl
 
-    prompt = f"""Bạn là biên tập viên tin tức video thời sự chuyên nghiệp.
-Hãy phân tích bài báo sau và tạo kịch bản video TikTok 9:16 thật hấp dẫn, kịch tính, mạch lạc theo đúng dòng thời gian thực tế:
+    prompt = f"""Bạn là biên tập viên tin tức video thời sự TikTok chuyên nghiệp.
+Hãy phân tích nội dung và thể loại của bài báo sau (Thời sự Quốc tế, Chiến sự - Quân sự, Kinh tế - Thị trường, Xã hội, Tai nạn - Cứu nạn, Pháp luật, Thể thao, Công nghệ, v.v.).
+Sau đó tạo kịch bản video TikTok 9:16 gồm 4-6 scenes thật hấp dẫn, kịch tính, mạch lạc theo đúng dòng thời gian thực tế:
+
 1. Scene 1: type="title_hero", headline="{title}", text="{title}" (Bắt buộc giữ nguyên 100% tiêu đề gốc bài báo, không cắt bớt).
-2. Scene 2 (Bối cảnh ban đầu): type="news_detail", headline="BỐI CẢNH VỤ VIỆC", bắt buộc nêu rõ thời gian, địa điểm, hoàn cảnh ban đầu (ai, ở đâu, khi nào, đang làm gì thì phát sinh việc) để khán giả nắm rõ ngữ cảnh.
-3. Scene 3 (Diễn biến xô xát): type="news_detail", headline="DIỄN BIẾN VỤ ÁN", nêu tiếp diễn biến mâu thuẫn, hành vi chặn đường, gây sự hoặc xô xát.
-4. Scene 4 (Hành vi gây án & Hậu quả): type="news_detail", headline="HÀNH VI GÂY ÁN", nêu rõ hành động nguy hiểm, hung khí và hậu quả thương tích/tử vong.
-5. Scene 5 (Khởi tố / Xử lý pháp luật): type="news_detail", headline="KẾT QUẢ ĐIỀU TRA", nêu việc cơ quan điều tra/công an khởi tố, bắt giữ hoặc xét xử.
-6. Scene cuối: type="follow", headline="THEO DÕI ĐỂ XEM THÊM", text="Bấm theo dõi kênh để cập nhật liên tục các tin tức nóng nhất."
+2. Các Scene chi tiết: type="news_detail", mỗi scene là 1 câu trọn vẹn (18-35 từ).
+   - BẮT BUỘC Scene đầu tiên của news_detail phải nêu bối cảnh (ai, ở đâu, khi nào, chuyện gì xảy ra).
+   - QUY TẮC ĐẶT TIÊU ĐỀ HEADLINE: Phải viết HOA, ngắn gọn (2-5 từ), đặt thật sát và biến hóa linh hoạt theo thể loại và diễn biến thực tế của bài báo. TUYỆT ĐỐI KHÔNG dùng rập khuôn từ "HÀNH VI GÂY ÁN" hay "KHỞI TỐ" cho tin không phải án mạng/hình sự!
+     * Tin Chiến sự / Quân sự / Quốc tế: DIỄN BIẾN ĐỘT KÍCH, TẤN CÔNG BẰNG TÊN LỬA, THIỆT HẠI THỰC TẾ, TUYÊN BỐ NHẬN TRÁCH NHIỆM, PHẢN ỨNG QUỐC TẾ, BIỆN PHÁP ĐÁP TRẢ...
+     * Tin Kinh tế / Tài chính: BIẾN ĐỘNG THỊ TRƯỜNG, TÁC ĐỘNG GIÁ DẦU, CHÍNH SÁCH MỚI, PHÂN TÍCH CHUYÊN GIA...
+     * Tin Thiên tai / Tai nạn: HIỆN TRƯỜNG SỰ CỐ, CÔNG TÁC CỨU HỘ, THỐNG KÊ THIỆT HẠI, NGUYÊN NHÂN BAN ĐẦU...
+     * Tin Pháp luật / Trọng án: BỐI CẢNH MÂU THUẪN, HÀNH VI GÂY ÁN, KẾT QUẢ ĐIỀU TRA...
+3. Scene cuối cùng: type="follow", headline="THEO DÕI ĐỂ XEM THÊM", text="Bấm theo dõi kênh để cập nhật liên tục các tin tức nóng nhất."
 
 BẮT BUỘC trả về đúng định dạng JSON Array các đối tượng sau (KHÔNG dùng markdown ```json, CHỈ xuất JSON thuần):
 [
@@ -232,45 +237,25 @@ BẮT BUỘC trả về đúng định dạng JSON Array các đối tượng sa
   {{
     "id": 2,
     "type": "news_detail",
-    "headline": "BỐI CẢNH VỤ VIỆC",
-    "text": "1 câu nêu rõ thời gian, địa điểm và hoàn cảnh khởi nguồn sự việc.",
+    "headline": "TIÊU ĐỀ IN HOA SÁT NỘI DUNG",
+    "text": "1 câu nêu rõ bối cảnh ban đầu.",
     "motion": "pan"
   }},
   {{
     "id": 3,
     "type": "news_detail",
-    "headline": "DIỄN BIẾN VỤ ÁN",
-    "text": "1 câu nêu diễn biến mâu thuẫn dẫn tới xô xát.",
+    "headline": "TIÊU ĐỀ IN HOA THEO DIỄN BIẾN",
+    "text": "1 câu nêu diễn biến tiếp theo.",
     "motion": "zoom_out"
   }},
   {{
     "id": 4,
-    "type": "news_detail",
-    "headline": "HÀNH VI GÂY ÁN",
-    "text": "1 câu nêu hành vi gây thương tích/tử vong và hung khí.",
-    "motion": "pan"
-  }},
-  {{
-    "id": 5,
-    "type": "news_detail",
-    "headline": "KẾT QUẢ ĐIỀU TRA",
-    "text": "1 câu tóm tắt việc cơ quan công an khởi tố bắt giữ.",
-    "motion": "zoom_out"
-  }},
-  {{
-    "id": 6,
     "type": "follow",
     "headline": "THEO DÕI ĐỂ XEM THÊM",
     "text": "Bấm theo dõi kênh để cập nhật liên tục các tin tức nóng nhất.",
     "motion": "static"
   }}
 ]
-
-QUY TẮC CẦN TUÂN THỦ TUYỆT ĐỐI:
-1. Scene 1: type="title_hero", headline và text bắt buộc giữ nguyên 100% tiêu đề bài báo gốc, không cắt bớt!
-2. Phải có bối cảnh khởi nguồn (ai, làm gì, ở đâu, khi nào) trước khi vào pha gay cấn, giúp video có mở bài - thân bài - kết bài chuẩn nghiệp vụ báo chí.
-3. Mỗi Scene news_detail chỉ gồm DUY NHẤT 1 CÂU HOÀN CHỈNH, ngắn gọn, súc tích (18-35 từ), từ ngữ dứt khoát.
-4. Scene cuối cùng bắt buộc là follow.
 
 BÀI BÁO:
 Tiêu đề: {title}
