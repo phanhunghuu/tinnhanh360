@@ -1,21 +1,22 @@
 """
 Overlay Renderer - Dùng Pillow vẽ các frame UI tin tức chuyên nghiệp 9:16 (1080x1920)
-Khớp chuẩn xác theo mẫu thực tế của người dùng:
+Khớp chuẩn xác theo mẫu thực tế và yêu cầu mới:
 1. Frame 1 (Title Hero):
    - Background toàn màn hình (ảnh bài báo gốc zoompan)
-   - Badge Nguồn (top-left, x=95, y=140)
-   - Logo góc trên phải: TỰ ĐỘNG chọn logo đỏ khi nền sáng, logo trắng khi nền tối!
-   - Vạch dọc màu đỏ (x=120, y=1100, w=16)
-   - Tiêu đề chữ trắng in đậm kích thước lớn 68px
-   - Ngày đăng góc dưới cùng bên trái (x=108, y=1640)
+   - Lớp gradient đen kéo cao lên (từ 35% màn hình) để tiêu đề hiện cực kỳ rõ nét
+   - Badge Nguồn (top-left) + Logo đỏ/trắng tự động (top-right)
+   - Tiêu đề: Font Inter-Black (trọng số 900 đậm nhất), hiển thị trọn vẹn 100% không cắt cụt
+   - Tự động co dãn cỡ chữ thông minh (60-68px) và giảm giãn cách dòng (line_spacing) gọn gàng
+   - Vạch dọc màu đỏ (#dc2626) nổi bật
+   - Ngày đăng góc dưới cùng bên trái
 
 2. Frame 2 (Chi tiết vụ việc):
    - Background ảnh bài báo làm mờ (heavy blur) + phủ tối cinematic
-   - Ảnh chi tiết (inset photo) bo tròn 32px ở vị trí trung tâm phía trên (x=108, y=384, w=864, h=774)
-   - Badge Nguồn (top-left) + Badge đỏ "DIỄN BIẾN VỤ VIỆC" ngay phía dưới
+   - Ảnh chi tiết (inset photo) bo tròn 32px ở vị trí trung tâm phía trên
+   - Badge Nguồn (top-left) + Badge đỏ "DIỄN BIẾN VỤ VIỆC"
    - Logo trắng góc trên bên phải
-   - Text nội dung tóm tắt chi tiết cỡ chữ 60px lớn, rõ nét, căn trái thẳng hàng (x=158, y=1230)
-   - Ngày đăng ở góc dưới cùng bên trái (x=108, y=1640)
+   - Text nội dung tóm tắt chi tiết: Chia theo từng câu, cỡ chữ 48-52px vừa vặn, giảm giãn cách dòng, đọc trọn vẹn
+   - Ngày đăng ở góc dưới cùng bên trái
 
 3. Frame 3 (Theo dõi / Outro):
    - Nền đen tuyền tối giản, sang trọng
@@ -33,18 +34,36 @@ from datetime import datetime
 W, H = 1080, 1920
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-FONT_INTER = os.path.join(BASE_DIR, "fonts", "Inter-Bold.ttf")
-if not os.path.exists(FONT_INTER):
-    FONT_INTER = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
+
+# Font Inter-Black (900 đậm nhất) cho tiêu đề và Inter-Bold cho các chi tiết
+FONT_INTER_BLACK = os.path.join(BASE_DIR, "fonts", "Inter-Black.ttf")
+FONT_INTER_BOLD = os.path.join(BASE_DIR, "fonts", "Inter-Bold.ttf")
+
+if not os.path.exists(FONT_INTER_BLACK):
+    FONT_INTER_BLACK = FONT_INTER_BOLD
+if not os.path.exists(FONT_INTER_BOLD):
+    FONT_INTER_BOLD = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
 
 LOGO_RED_PATH = os.path.join(BASE_DIR, "assets", "logo_red_clean.png")
 LOGO_WHITE_PATH = os.path.join(BASE_DIR, "assets", "logo_white_clean.png")
 FOLLOW_FRAME_PATH = os.path.join(BASE_DIR, "assets", "follow_frame_1080.png")
 
 
-def _font(size: int) -> ImageFont.FreeTypeFont:
+def _font_black(size: int) -> ImageFont.FreeTypeFont:
+    """Font Inter-Black (trọng số 900) đậm nhất."""
     try:
-        return ImageFont.truetype(FONT_INTER, size)
+        return ImageFont.truetype(FONT_INTER_BLACK, size)
+    except Exception:
+        try:
+            return ImageFont.truetype(FONT_INTER_BOLD, size)
+        except Exception:
+            return ImageFont.load_default()
+
+
+def _font_bold(size: int) -> ImageFont.FreeTypeFont:
+    """Font Inter-Bold cho badge và văn bản chi tiết."""
+    try:
+        return ImageFont.truetype(FONT_INTER_BOLD, size)
     except Exception:
         return ImageFont.load_default()
 
@@ -113,19 +132,19 @@ def _draw_logo(target_img: Image.Image, is_dark_bg: bool = True, target_w: int =
 
 def _draw_source_pill(draw: ImageDraw.Draw, source: str, top: int = 140, left: int = 95):
     """Badge Nguồn bo tròn bán nguyệt nền xám đen mờ chuẩn như mẫu."""
-    font = _font(28)
+    font = _font_bold(28)
     text = f"Nguồn: {source.lower()}"
     text_w = int(draw.textlength(text, font=font))
     pad_x, pad_y = 24, 14
     box = [(left, top), (left + text_w + pad_x * 2, top + 34 + pad_y * 2)]
     draw.rounded_rectangle(box, radius=18, fill=(0, 0, 0, 160))
     draw.text((left + pad_x, top + pad_y - 2), text, font=font, fill=(240, 240, 240, 255))
-    return box[1][1]  # return bottom y
+    return box[1][1]
 
 
 def _draw_headline_pill(draw: ImageDraw.Draw, headline: str, top: int = 215, left: int = 95):
     """Badge đỏ chữ trắng nổi bật (như DIỄN BIẾN VỤ VIỆC)."""
-    font = _font(34)
+    font = _font_bold(34)
     text = headline.upper().strip()
     text_w = int(draw.textlength(text, font=font))
     pad_x, pad_y = 26, 14
@@ -137,7 +156,7 @@ def _draw_headline_pill(draw: ImageDraw.Draw, headline: str, top: int = 215, lef
 
 def _draw_date(draw: ImageDraw.Draw, date_str: str, left: int = 108, bottom: int = 1640):
     """Dòng chữ 'Ngày đăng: dd/mm/yyyy' ở góc dưới trái (vị trí chuẩn mẫu y=1640)."""
-    font = _font(28)
+    font = _font_bold(28)
     text = f"Ngày đăng: {date_str}"
     draw.text((left, bottom), text, font=font, fill=(220, 220, 220, 220))
 
@@ -155,56 +174,66 @@ def make_title_hero_overlay(
 ):
     """
     Overlay Frame 1 (Tiêu đề bài viết kèm hình):
-    - Background ảnh bài báo được ffmpeg zoom phía sau
-    - Gradient đen mờ từ nửa dưới để tôn chữ trắng
-    - Nguồn góc trên trái, Logo góc trên phải (tự động chọn đỏ/trắng theo độ sáng ảnh)
-    - Vạch đỏ dọc bên trái tiêu đề
-    - Tiêu đề chữ trắng kích thước lớn 68px
-    - Ngày đăng dưới góc trái y=1640
+    - Mảng shadow màu đen được kéo cao lên (từ 35% màn hình) để tiêu đề hiện cực kỳ rõ nét.
+    - Tiêu đề in đậm nhất (Font Inter-Black 900).
+    - Hiển thị trọn vẹn 100% nội dung tiêu đề, không cắt bớt chữ nào.
+    - Giảm giãn cách dòng (line_spacing) gọn gàng.
+    - Vạch đỏ dọc thẳng hàng bên trái tiêu đề.
     """
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # Tự động chọn logo đỏ trên nền sáng, logo trắng trên nền tối
+    # Chọn logo đỏ trên nền sáng, logo trắng trên nền tối
     is_light = detect_is_light_bg(bg_image_path, "top_right") if bg_image_path else False
 
-    # 1. Gradient tối chuyển tiếp mượt mà từ 40% màn hình xuống đáy
-    grad_start = int(H * 0.45)
+    # 1. Mảng shadow đen kéo cao lên (bắt đầu từ 35% màn hình thay vì 45%) để che tối nền và tôn rõ chữ
+    grad_start = int(H * 0.35)
     for y in range(grad_start, H):
         factor = (y - grad_start) / (H - grad_start)
-        alpha = int(min(240, 255 * (factor ** 1.35)))
+        alpha = int(min(250, 255 * (factor ** 1.15)))
         draw.line([(0, y), (W, y)], fill=(0, 0, 0, alpha))
 
     # 2. Source badge & Logo
     _draw_source_pill(draw, source, top=140, left=95)
     _draw_logo(img, is_dark_bg=not is_light, target_w=250, top=130, right=90)
 
-    # 3. Tiêu đề bài viết
-    font_title = _font(68)
-    max_text_w = W - 320  # rộng ~760px
+    # 3. Tiêu đề bài viết: Dùng Inter-Black (900), tự động điều chỉnh cỡ chữ nếu tiêu đề dài
+    font_size = 64
+    font_title = _font_black(font_size)
+    max_text_w = W - 300  # Rộng ~780px
     lines = _wrap(title, font_title, max_text_w, draw)
-    lines = lines[:5]
 
-    line_h = 88
+    # Nếu tiêu đề dài hơn 4 dòng, tự động giảm nhẹ cỡ chữ để đảm bảo hiển thị trọn vẹn và đẹp mắt
+    if len(lines) > 4:
+        font_size = 56
+        font_title = _font_black(font_size)
+        lines = _wrap(title, font_title, max_text_w, draw)
+
+    # Giảm giãn cách dòng: khoảng cách dòng chỉ bằng font_size + 14px (gọn gàng, chặt chẽ)
+    line_h = font_size + 14
     total_h = len(lines) * line_h
-    start_y = 1100
+
+    # Đặt vị trí tiêu đề sao cho vừa vặn trước phần Ngày đăng
+    # Đáy tiêu đề cách ngày đăng (1640) khoảng 60px
+    start_y = min(1120, 1580 - total_h)
 
     # Vạch đỏ dọc thẳng bên trái tiêu đề (x=120)
     bar_x = 120
     bar_w = 16
     draw.rounded_rectangle(
-        [(bar_x, start_y + 8), (bar_x + bar_w, start_y + total_h - 8)],
+        [(bar_x, start_y + 4), (bar_x + bar_w, start_y + total_h - 4)],
         radius=6, fill=(220, 18, 28, 255)
     )
 
-    # Vẽ các dòng tiêu đề chữ trắng nổi bật (x=175)
+    # Vẽ các dòng tiêu đề chữ trắng nét siêu đậm Inter-Black
     text_x = 175
     for i, line in enumerate(lines):
         y = start_y + i * line_h
-        draw.text((text_x + 2, y + 2), line, font=font_title, fill=(0, 0, 0, 180))
+        # Shadow đen mạnh hơn để nổi bật chữ trên mọi bức ảnh nền
+        draw.text((text_x + 3, y + 3), line, font=font_title, fill=(0, 0, 0, 220))
         draw.text((text_x, y), line, font=font_title, fill=(255, 255, 255, 255))
 
-    # 4. Ngày đăng góc dưới cùng
+    # 4. Ngày đăng góc dưới cùng (y=1640)
     _draw_date(draw, date_str or get_current_date_str(), left=108, bottom=1640)
 
     img.save(out_path)
@@ -224,15 +253,13 @@ def create_detail_frame_image(
     out_path: str
 ):
     """
-    Tạo frame ảnh chi tiết hoàn chỉnh:
-    - Nền: Lấy chính ảnh bài báo blur thật mạnh (Radius 50) + phủ lớp tối màu #0c0c0f (alpha ~ 72%)
-    - Ảnh Inset: Bo góc tròn 32px ở vị trí trung tâm phía trên (x=108, y=384, w=864, h=774)
-    - Badge Nguồn + Badge đỏ (DIỄN BIẾN VỤ VIỆC)
-    - Logo TIN 360 NHANH màu trắng góc trên bên phải
-    - Nội dung chữ lớn màu trắng rõ nét phía dưới ảnh (x=158, y=1230, font 60px)
-    - Ngày đăng ở góc dưới (x=108, y=1640)
+    Tạo frame ảnh chi tiết:
+    - Ảnh Inset: Bo góc tròn 32px ở vị trí trung tâm phía trên.
+    - Badge Nguồn + Badge đỏ "DIỄN BIẾN VỤ VIỆC".
+    - Logo trắng góc trên bên phải.
+    - Text nội dung tóm tắt: Font 48-52px, giảm giãn cách dòng, hiển thị đầy đủ câu theo voice.
+    - Ngày đăng ở góc dưới (y=1640).
     """
-    # 1. Tạo nền canvas tối
     canvas = Image.new("RGBA", (W, H), (18, 18, 22, 255))
 
     inset_img = None
@@ -251,7 +278,7 @@ def create_detail_frame_image(
             bg_blurred = bg_cropped.filter(ImageFilter.GaussianBlur(radius=50))
             canvas.paste(bg_blurred, (0, 0))
 
-            # Phủ lớp tối màu đen/than (alpha 72%) lên nền mờ
+            # Phủ lớp tối màu than (alpha 72%) lên nền mờ
             dark_tint = Image.new("RGBA", (W, H), (12, 12, 15, 185))
             canvas.alpha_composite(dark_tint)
 
@@ -259,7 +286,7 @@ def create_detail_frame_image(
         except Exception as e:
             print(f"Error processing background blur: {e}")
 
-    # 2. Vẽ ảnh Inset bo góc ở giữa phía trên (x=108, y=384, w=864, h=774)
+    # Vẽ ảnh Inset bo góc ở giữa phía trên (x=108, y=384, w=864, h=774)
     inset_x = 108
     inset_y = 384
     inset_w = 864
@@ -275,42 +302,46 @@ def create_detail_frame_image(
         cy = (scaled_h - inset_h) // 2
         cropped_inset = scaled_inset.crop((cx, cy, cx + inset_w, cy + inset_h)).convert("RGBA")
 
-        # Tạo mask bo tròn góc 32px
+        # Mask bo tròn góc 32px
         mask = Image.new("L", (inset_w, inset_h), 0)
         mask_draw = ImageDraw.Draw(mask)
         mask_draw.rounded_rectangle([(0, 0), (inset_w, inset_h)], radius=32, fill=255)
 
-        # Dán ảnh inset có bo góc lên canvas
         canvas.paste(cropped_inset, (inset_x, inset_y), mask)
 
     draw = ImageDraw.Draw(canvas)
 
-    # 3. Badge nguồn & Badge đỏ
+    # Badge nguồn & Badge đỏ
     b1_bot = _draw_source_pill(draw, source, top=140, left=95)
     badge_label = headline_badge or "DIỄN BIẾN VỤ VIỆC"
     _draw_headline_pill(draw, badge_label, top=b1_bot + 16, left=95)
 
-    # 4. Logo trắng góc trên phải (nền chi tiết luôn tối nên dùng logo trắng)
+    # Logo trắng góc trên phải
     _draw_logo(canvas, is_dark_bg=True, target_w=250, top=130, right=90)
 
-    # 5. Nội dung tóm tắt chi tiết (cỡ chữ 60px lớn, đậm nét, căn trái x=158)
-    font_content = _font(60)
-    content_max_w = W - 300  # ~780px
+    # Nội dung tóm tắt chi tiết: Cỡ chữ nhỏ lại một chút (50px), giảm giãn cách dòng để hiển thị trọn vẹn câu
+    font_size = 50
+    font_content = _font_bold(font_size)
+    content_max_w = W - 260  # Rộng ~820px
     content_lines = _wrap(content_text, font_content, content_max_w, draw)
-    content_lines = content_lines[:5]
 
-    text_start_y = 1230
-    line_h = 84
+    # Nếu câu dài quá 4 dòng, co nhẹ xuống 44px để không chạm vào ngày đăng
+    if len(content_lines) > 4:
+        font_size = 44
+        font_content = _font_bold(font_size)
+        content_lines = _wrap(content_text, font_content, content_max_w, draw)
+
+    text_start_y = 1220
+    line_h = font_size + 16  # Giảm giãn cách dòng
 
     for i, line in enumerate(content_lines):
         y = text_start_y + i * line_h
-        draw.text((160, y + 2), line, font=font_content, fill=(0, 0, 0, 180))
-        draw.text((158, y), line, font=font_content, fill=(255, 255, 255, 255))
+        draw.text((150, y + 2), line, font=font_content, fill=(0, 0, 0, 180))
+        draw.text((148, y), line, font=font_content, fill=(255, 255, 255, 255))
 
-    # 6. Ngày đăng dưới cùng bên trái (x=108, y=1640)
+    # Ngày đăng dưới cùng bên trái (x=108, y=1640)
     _draw_date(draw, date_str or get_current_date_str(), left=108, bottom=1640)
 
-    # Lưu kết quả
     canvas.convert("RGB").save(out_path, "JPEG", quality=95)
     return out_path
 
@@ -322,7 +353,6 @@ def create_detail_frame_image(
 def create_follow_frame_image(out_path: str):
     """
     Tạo frame kết nối follow xem thêm nhiều tin hot.
-    Sử dụng mẫu chuẩn người dùng cung cấp hoặc vẽ vector chuẩn xác.
     """
     if os.path.exists(FOLLOW_FRAME_PATH):
         try:
@@ -333,7 +363,6 @@ def create_follow_frame_image(out_path: str):
         except Exception as e:
             print(f"Error copying follow frame: {e}")
 
-    # Fallback vẽ nền đen
     img = Image.new("RGB", (W, H), (0, 0, 0))
     logo_w = 480
     _draw_logo(img, is_dark_bg=True, target_w=logo_w, top=650, right=(W - logo_w) // 2)
@@ -343,10 +372,10 @@ def create_follow_frame_image(out_path: str):
     bx1 = (W - btn_w) // 2
     by1 = 880
     draw.rounded_rectangle([(bx1, by1), (bx1 + btn_w, by1 + btn_h)], radius=50, fill=(0, 122, 255))
-    font_btn = _font(42)
+    font_btn = _font_bold(42)
     draw.text((bx1 + 75, by1 + 25), "FOLLOW", font=font_btn, fill=(255, 255, 255))
 
-    font_cta = _font(34)
+    font_cta = _font_bold(34)
     cta1 = "THEO DÕI ĐỂ XEM THÊM"
     cta2 = "NHIỀU TIN HOT"
     draw.text(((W - int(draw.textlength(cta1, font=font_cta))) // 2, 1050), cta1, font=font_cta, fill=(255, 255, 255))

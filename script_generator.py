@@ -1,9 +1,9 @@
 """
 Script Generator - Phân tích bài báo thành danh sách scenes theo chuẩn biên tập báo chí thời sự.
 Bố cục chuẩn hóa theo layout mẫu:
-- Frame 1 (title_hero): Tiêu đề bài viết + hình nền đầy đủ (như Hình 1).
-- Các Frame chi tiết (news_detail): Nền tối mờ + ảnh inset bo tròn + badge đỏ diễn biến + nội dung lớn (như Hình 2).
-- Frame kết (follow): Theo dõi để xem thêm nhiều tin hot (như Hình 3).
+- Frame 1 (title_hero): Tiêu đề bài viết GIỮ NGUYÊN ĐẦY ĐỦ 100% (không cắt bớt), kèm hình nền.
+- Các Frame chi tiết (news_detail): Tách theo từng câu trọn vẹn, hiển thị đồng bộ với giọng nói voice.
+- Frame kết (follow): Theo dõi để xem thêm nhiều tin hot.
 """
 import re
 import os
@@ -19,7 +19,7 @@ def _clean_text(text: str) -> str:
 
 def _split_into_paragraphs(content: str, title: str) -> List[str]:
     """Tách bài báo thành các đoạn văn hoàn chỉnh có nghĩa."""
-    raw_paras = [p.strip() for p in content.split('\n') if len(p.strip()) > 30]
+    raw_paras = [p.strip() for p in content.split('\n') if len(p.strip()) > 25]
     cleaned = []
     title_lower = title.strip().lower()
 
@@ -34,27 +34,14 @@ def _split_into_paragraphs(content: str, title: str) -> List[str]:
     return cleaned
 
 
-def _extract_coherent_sentences(paragraph: str, max_words: int = 40) -> str:
-    """
-    Trích xuất các câu trọn vẹn trong đoạn văn để đọc không bị cụt.
-    Đảm bảo kết thúc bằng dấu chấm hoàn chỉnh.
-    """
-    sents = [s.strip() for s in re.split(r'(?<=[.!?])\s+', paragraph) if len(s.strip()) > 15]
-    if not sents:
-        return paragraph
-
-    result_sents = []
-    total_words = 0
-    for s in sents:
-        words_count = len(s.split())
-        result_sents.append(s)
-        total_words += words_count
-        if total_words >= max_words:
-            break
-
-    res = " ".join(result_sents)
-    if not res.endswith(('.', '!', '?')):
-        res += '.'
+def _split_into_sentences(text: str) -> List[str]:
+    """Tách văn bản thành danh sách từng câu hoàn chỉnh có nghĩa."""
+    raw_sents = [s.strip() for s in re.split(r'(?<=[.!?])\s+', text) if len(s.strip()) > 15]
+    res = []
+    for s in raw_sents:
+        if not s.endswith(('.', '!', '?')):
+            s += '.'
+        res.append(s)
     return res
 
 
@@ -65,11 +52,11 @@ def parse_article_to_scenes(
 ) -> dict:
     """
     Phân tích bài báo thành list scenes:
-    - Frame 1: Title Hero (tương tự hình 1)
-    - Frame 2, 3, 4: News Detail với badge đỏ & ảnh inset (tương tự hình 2)
-    - Frame Cuối: Follow Outro (tương tự hình 3)
+    - Frame 1: Title Hero (Tiêu đề bài viết đầy đủ 100%, không cắt bớt)
+    - Frame 2, 3, 4: News Detail từng câu trọn vẹn, khớp giọng đọc voice
+    - Frame Cuối: Follow Outro
     """
-    title   = article.get("title", "Tin tức mới nhất")
+    title   = _clean_text(article.get("title", "Tin tức mới nhất"))
     content = article.get("content", "")
     source  = article.get("source", "Tin tức")
 
@@ -85,93 +72,63 @@ def parse_article_to_scenes(
 
     scenes = []
 
-    # 1. FRAME 1: Title Hero (Tiêu đề bài viết kèm hình - Hình 1)
-    lead_text = _extract_coherent_sentences(paragraphs[0], max_words=30)
+    # 1. FRAME 1: Title Hero (Tiêu đề bài viết GIỮ NGUYÊN ĐẦY ĐỦ 100%)
+    # Lời đọc mở đầu lấy câu đầu tiên của bài báo
+    lead_sents = _split_into_sentences(paragraphs[0])
+    lead_text = lead_sents[0] if lead_sents else title
     scenes.append({
         "id": 1,
         "type": "title_hero",
-        "headline": title[:65],
+        "headline": title,  # Giữ trọn vẹn 100% tiêu đề gốc!
         "text": lead_text,
         "motion": "zoom_in",
     })
 
-    # Tìm các đoạn văn tương ứng theo chủ đề
-    event_para = None
-    for p in paragraphs[1:]:
-        p_l = p.lower()
-        if any(k in p_l for k in ["lái xe", "vượt một", "lấn sang", "va chạm", "tông vào", "chèn qua", "đánh lái", "lưu thông", "theo bản án", "ngày"]):
-            event_para = p
-            break
-    if not event_para and len(paragraphs) > 1:
-        event_para = paragraphs[1]
+    # Thu thập tất cả các câu từ các đoạn văn tiếp theo
+    all_sentences = []
+    # Nếu đoạn đầu có nhiều hơn 1 câu, lấy các câu tiếp theo vào chi tiết
+    if len(lead_sents) > 1:
+        all_sentences.extend(lead_sents[1:])
 
-    # Đoạn phán quyết
-    verdict_para = None
     for p in paragraphs[1:]:
-        p_l = p.lower()
-        if p != event_para and any(k in p_l for k in ["tuyên phạt", "hđxx buộc", "bồi thường", "án tù", "tháng tù", "năm tù", "phán quyết", "tử vong", "bị cáo"]):
-            verdict_para = p
-            break
+        sents = _split_into_sentences(p)
+        all_sentences.extend(sents)
 
-    # Đoạn tình tiết bổ sung
-    detail_para = None
-    for p in paragraphs[1:]:
-        p_l = p.lower()
-        if p != event_para and p != verdict_para and any(k in p_l for k in ["xác định", "có lỗi", "kết luận", "hậu quả", "quy định", "giảm nhẹ", "khắc phục", "gia đình"]):
-            detail_para = p
-            break
+    # Nếu số câu ít quá, gộp thành 2-3 câu
+    # Mỗi câu làm 1 frame chi tiết để phụ đề vừa vặn và chạy khớp hoàn hảo với voice
+    headlines_cycle = [
+        "DIỄN BIẾN VỤ VIỆC",
+        "TÌNH TIẾT VỤ ÁN",
+        "PHÁN QUYẾT CỦA TÒA ÁN",
+        "KẾT QUẢ XỬ LÝ",
+        "THÔNG TIN BỔ SUNG"
+    ]
 
-    # 2. FRAME 2: Diễn biến vụ việc (Hình 2)
-    if event_para:
-        event_text = _extract_coherent_sentences(event_para, max_words=40)
+    # Giới hạn tối đa khoảng 4-5 frame chi tiết để video súc tích, vừa vặn 30-60s
+    selected_sents = all_sentences[:5]
+    if not selected_sents and len(paragraphs) > 1:
+        selected_sents = [paragraphs[1]]
+
+    for i, sent in enumerate(selected_sents):
+        hl = headlines_cycle[i % len(headlines_cycle)]
+        # Tự động gán headline thông minh dựa trên nội dung câu
+        s_lower = sent.lower()
+        if any(k in s_lower for k in ["tuyên phạt", "tháng tù", "năm tù", "bồi thường", "hđxx", "phán quyết"]):
+            hl = "PHÁN QUYẾT CỦA TÒA ÁN"
+        elif any(k in s_lower for k in ["sáng", "ngày", "chiều", "lái xe", "va chạm", "tông", "lấn sang"]):
+            hl = "DIỄN BIẾN VỤ VIỆC"
+        elif any(k in s_lower for k in ["xác định", "kết luận", "nguyên nhân", "lỗi", "giảm nhẹ"]):
+            hl = "KẾT LUẬN ĐIỀU TRA"
+
         scenes.append({
-            "id": 2,
+            "id": len(scenes) + 1,
             "type": "news_detail",
-            "headline": "DIỄN BIẾN VỤ VIỆC",
-            "text": event_text,
-            "motion": "pan",
+            "headline": hl,
+            "text": sent,
+            "motion": "pan" if i % 2 == 0 else "zoom_out",
         })
 
-    # 3. FRAME 3: Phán quyết / Kết quả xử lý (Hình 2 layout)
-    if verdict_para:
-        verdict_text = _extract_coherent_sentences(verdict_para, max_words=40)
-        scenes.append({
-            "id": 3,
-            "type": "news_detail",
-            "headline": "PHÁN QUYẾT CỦA TÒA ÁN",
-            "text": verdict_text,
-            "motion": "zoom_out",
-        })
-
-    # 4. FRAME 4: Tình tiết / Trách nhiệm (Hình 2 layout)
-    if detail_para:
-        detail_text = _extract_coherent_sentences(detail_para, max_words=38)
-        scenes.append({
-            "id": 4,
-            "type": "news_detail",
-            "headline": "TÌNH TIẾT XỬ LÝ",
-            "text": detail_text,
-            "motion": "zoom_in",
-        })
-
-    # Nếu bài ngắn hơn, bổ sung thêm đoạn chi tiết khác để video đủ độ dài
-    if len(scenes) < 3:
-        used_texts = {sc["text"] for sc in scenes}
-        for p in paragraphs[1:]:
-            p_text = _extract_coherent_sentences(p, max_words=35)
-            if p_text not in used_texts:
-                scenes.append({
-                    "id": len(scenes) + 1,
-                    "type": "news_detail",
-                    "headline": "THÔNG TIN CHI TIẾT",
-                    "text": p_text,
-                    "motion": "pan",
-                })
-                used_texts.add(p_text)
-                if len(scenes) >= 3:
-                    break
-
-    # 5. FRAME CUỐI: Theo dõi để xem thêm (Hình 3)
+    # FRAME CUỐI: Theo dõi để xem thêm
     scenes.append({
         "id": len(scenes) + 1,
         "type": "follow",
@@ -180,7 +137,7 @@ def parse_article_to_scenes(
         "motion": "static",
     })
 
-    # Đánh lại ID cho chuẩn thứ tự 1, 2, 3...
+    # Đánh lại ID theo thứ tự
     for i, sc in enumerate(scenes, 1):
         sc["id"] = i
 
@@ -198,25 +155,22 @@ def _gemini_generate_scenes(title, content, source, duration, api_key) -> list:
         from google import genai
         client = genai.Client(api_key=api_key)
         prompt = f"""Bạn là biên tập viên video tin tức TikTok chuyên nghiệp.
-Hãy phân tích bài báo sau và tạo danh sách 4-5 scenes cho video thời sự dọc 9:16 ({duration} giây) theo đúng cấu trúc:
-1. Scene 1: type="title_hero", Tiêu đề to giật gân + lời dẫn mở đầu (Lead).
-2. Các Scene tiếp theo (2, 3...): type="news_detail", diễn biến, tình tiết, phán quyết với headline ngắn gọn (ví dụ: DIỄN BIẾN VỤ VIỆC, PHÁN QUYẾT CỦA TÒA...).
-3. Scene cuối cùng: type="follow", headline="THEO DÕI ĐỂ XEM THÊM", text="Bấm theo dõi kênh để cập nhật tin tức nóng hổi mỗi ngày."
+Hãy phân tích bài báo sau và tạo danh sách các scenes cho video thời sự dọc 9:16 ({duration} giây) theo đúng cấu trúc:
+1. Scene 1: type="title_hero", headline="{title}" (giữ đầy đủ 100% tiêu đề bài báo, không được cắt ngắn), text="Lời dẫn mở đầu ngắn gọn".
+2. Các Scene chi tiết: type="news_detail", mỗi scene là MỘT CÂU TRỌN VẸN duy nhất ngắn gọn dễ đọc, headline là cụm từ ngắn gọn (DIỄN BIẾN VỤ VIỆC, PHÁN QUYẾT CỦA TÒA ÁN...).
+3. Scene cuối cùng: type="follow", headline="THEO DÕI ĐỂ XEM THÊM", text="Bấm theo dõi kênh để cập nhật nhiều tin hot."
 
 BÀI BÁO:
 Tiêu đề: {title}
 Nguồn: {source}
 Nội dung: {content[:3500]}
 
-YÊU CẦU QUAN TRỌNG:
-1. Mỗi scene phải là một đoạn văn / ý trọn vẹn, kết thúc bằng dấu chấm rõ ràng, TUYỆT ĐỐI KHÔNG cắt câu cụt ngủn hoặc ngắt giữa chừng.
-
 Trả về duy nhất định dạng JSON sau (KHÔNG bọc trong markdown ```json):
 [
   {{
     "id": 1,
     "type": "title_hero",
-    "headline": "Tiêu đề ngắn gọn giật gân (<60 ký tự)",
+    "headline": "{title}",
     "text": "Lời đọc mở đầu đầy đủ ý nghĩa.",
     "motion": "zoom_in"
   }},
@@ -224,14 +178,14 @@ Trả về duy nhất định dạng JSON sau (KHÔNG bọc trong markdown ```js
     "id": 2,
     "type": "news_detail",
     "headline": "DIỄN BIẾN VỤ VIỆC",
-    "text": "Diễn biến chi tiết trọn vẹn câu từ bài báo.",
+    "text": "Một câu diễn biến chi tiết từ bài báo.",
     "motion": "pan"
   }},
   {{
     "id": 3,
     "type": "news_detail",
     "headline": "PHÁN QUYẾT CỦA TÒA ÁN",
-    "text": "Thông tin xử lý nghiêm minh trọn vẹn câu.",
+    "text": "Một câu phán quyết mức án nghiêm minh.",
     "motion": "zoom_out"
   }},
   {{
