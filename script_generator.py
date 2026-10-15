@@ -191,12 +191,13 @@ Trả về duy nhất định dạng JSON sau (KHÔNG bọc trong markdown ```js
   }}
 ]
 """
-        model_candidates = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash"]
+        model_candidates = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
         resp = None
         for m in model_candidates:
             try:
                 resp = client.models.generate_content(model=m, contents=prompt)
                 if resp and resp.text:
+                    print(f"Gemini successfully used model: {m}")
                     break
             except Exception as me:
                 print(f"Model {m} failed: {me}")
