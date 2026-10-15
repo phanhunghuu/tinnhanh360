@@ -35,6 +35,7 @@ class RenderRequest(BaseModel):
     images: List[str] = []
     scenes: List[dict]
     voice: str = "vi-VN-HoaiMyNeural"
+    zalo_key: Optional[str] = "c6B974D16LbRHcSR1hRGGswtXV0LUOr6"
 
 
 @app.post("/api/parse-article")
@@ -60,11 +61,16 @@ async def render_video(req: RenderRequest):
     os.makedirs(job_dir, exist_ok=True)
 
     try:
-        # 1. Generate TTS cho từng scene (độc lập, đo duration chuẩn)
+        # 1. Generate TTS cho từng scene (hỗ trợ cả Zalo AI lẫn Edge-TTS)
         tts_results = []
         for idx, scene in enumerate(req.scenes):
             audio_path = os.path.join(job_dir, f"audio_{idx:02d}.mp3")
-            result = generate_tts(scene["text"], req.voice, audio_path)
+            result = generate_tts(
+                text=scene["text"],
+                voice=req.voice,
+                audio_path=audio_path,
+                zalo_api_key=req.zalo_key or "c6B974D16LbRHcSR1hRGGswtXV0LUOr6"
+            )
             tts_results.append(result)
 
         # 2. Render video

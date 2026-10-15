@@ -1,21 +1,82 @@
 """
-TTS Module - Thu thập audio + sentence timestamps từ Edge-TTS
-Được cấu hình tốc độ đọc rate="+30%" theo yêu cầu người dùng.
+TTS Module - Hỗ trợ cả Zalo AI TTS (chất lượng cao) và Edge-TTS (miễn phí không giới hạn).
 """
 import asyncio
 import edge_tts
 import subprocess
 import os
+import requests
 import concurrent.futures
+from typing import Optional
 
 
-async def _stream_tts(text: str, voice: str, audio_path: str, rate: str = "+30%") -> list:
-    """
-    Stream edge-tts, ghi audio ra file và thu thập SentenceBoundary timestamps.
-    Tự động retry tối đa 3 lần nếu mạng chập chờn hoặc dịch vụ bận.
-    """
+ZALO_VOICES = {
+    "zalo-1": {"speaker_id": 1, "name": "Zalo AI - Nữ Miền Nam"},
+    "zalo-2": {"speaker_id": 2, "name": "Zalo AI - Nữ Miền Bắc (Chuẩn VTV)"},
+    "zalo-3": {"speaker_id": 3, "name": "Zalo AI - Nam Miền Nam"},
+    "zalo-4": {"speaker_id": 4, "name": "Zalo AI - Nam Miền Bắc (Trầm ấm)"},
+    "zalo-5": {"speaker_id": 5, "name": "Zalo AI - Nữ Miền Bắc 2"},
+    "zalo-6": {"speaker_id": 6, "name": "Zalo AI - Nữ Miền Nam 2"},
+}
+
+
+def _generate_zalo_tts(text: str, voice: str, audio_path: str, api_key: str, speed: float = 1.1) -> bool:
+    """Gọi API Zalo AI để sinh file âm thanh wav/mp3 với polling chờ file ready."""
+    import time
+    speaker_id = ZALO_VOICES.get(voice, {}).get("speaker_id", 2)
+    clean_text = (text or "").strip()
+    if not clean_text:
+        clean_text = "..."
+
+    headers = {"apikey": api_key}
+    data = {
+        "input": clean_text,
+        "speaker_id": speaker_id,
+        "speed": speed,
+    }
+
+    try:
+        resp = requests.post("https://api.zalo.ai/v1/tts/synthesize", headers=headers, data=data, timeout=15)
+        res_json = resp.json()
+        if res_json.get("error_code") == 0 and "data" in res_json and "url" in res_json["data"]:
+            audio_url = res_json["data"]["url"]
+
+            # Zalo AI sinh file bất đồng bộ trên CDN, cần poll 0.5s - 1s để file sẵn sàng
+            audio_content = None
+            for _ in range(12):
+                time.sleep(0.5)
+                audio_resp = requests.get(audio_url, timeout=10)
+                if audio_resp.status_code == 200 and len(audio_resp.content) > 500:
+                    audio_content = audio_resp.content
+                    break
+
+            if audio_content:
+                temp_wav = audio_path + ".tmp.wav"
+                with open(temp_wav, "wb") as f:
+                    f.write(audio_content)
+
+                subprocess.run([
+                    "ffmpeg", "-y", "-i", temp_wav,
+                    "-ar", "44100", "-ac", "2", "-b:a", "128k",
+                    audio_path
+                ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+                if os.path.exists(temp_wav):
+                    os.remove(temp_wav)
+                return True
+            else:
+                print(f"Zalo audio polling timed out for url: {audio_url}")
+        else:
+            print(f"Zalo AI error: {res_json}")
+    except Exception as e:
+        print(f"Zalo TTS exception: {e}")
+
+    return False
+
+
+async def _stream_edge_tts(text: str, voice: str, audio_path: str, rate: str = "+30%") -> list:
+    """Stream edge-tts có retry tối đa 3 lần."""
     clean_text = text.strip()
-    # Loại bỏ các ký tự đặc biệt hoặc text quá ngắn chỉ có dấu câu gây lỗi NoAudioReceived
     if not clean_text or not any(c.isalnum() for c in clean_text):
         clean_text = "..."
 
@@ -46,9 +107,7 @@ async def _stream_tts(text: str, voice: str, audio_path: str, rate: str = "+30%"
             last_err = e
             await asyncio.sleep(0.8 * (attempt + 1))
 
-    # Nếu sau 3 lần vẫn lỗi (ví dụ text chỉ có ký tự lạ hoặc dịch vụ Microsoft tạm ngắt)
-    # Fallback tạo file audio ngắn bằng ffmpeg để pipeline không bị crash gãy cả video
-    print(f"Warning: TTS failed for text '{text[:40]}...': {last_err}. Using fallback.")
+    print(f"Warning: Edge-TTS failed for text '{text[:40]}...': {last_err}. Using fallback.")
     subprocess.run([
         "ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
         "-t", "2.0", audio_path
@@ -63,17 +122,34 @@ def _run_in_thread(coro):
         return future.result()
 
 
-def generate_tts(text: str, voice: str, audio_path: str, rate: str = "+30%") -> dict:
+def generate_tts(
+    text: str,
+    voice: str,
+    audio_path: str,
+    rate: str = "+30%",
+    zalo_api_key: Optional[str] = None
+) -> dict:
     """
-    Chạy TTS tốc độ +30% - an toàn dù gọi từ trong FastAPI async context.
-    Returns: {"audio_path", "duration", "sentences": [...]}
+    Sinh audio từ text:
+    - Nếu voice là giọng Zalo và có API key -> Gọi Zalo AI TTS (tốc độ đọc nhanh 1.1).
+    - Ngược lại -> Gọi Edge-TTS tốc độ +30%.
     """
-    # Xử lý text rỗng
     text = (text or "").strip()
     if not text:
         text = "..."
 
-    boundaries = _run_in_thread(_stream_tts(text, voice, audio_path, rate=rate))
+    boundaries = []
+    use_zalo = voice.startswith("zalo-") and bool(zalo_api_key)
+
+    if use_zalo:
+        success = _generate_zalo_tts(text, voice, audio_path, zalo_api_key, speed=1.1)
+        if not success:
+            print("Zalo AI failed, fallbacking to Edge-TTS...")
+            boundaries = _run_in_thread(_stream_edge_tts(text, "vi-VN-HoaiMyNeural", audio_path, rate=rate))
+    else:
+        # Nếu chọn Edge-TTS
+        edge_voice = voice if not voice.startswith("zalo-") else "vi-VN-HoaiMyNeural"
+        boundaries = _run_in_thread(_stream_edge_tts(text, edge_voice, audio_path, rate=rate))
 
     # Đo duration thực tế
     try:
@@ -90,4 +166,3 @@ def generate_tts(text: str, voice: str, audio_path: str, rate: str = "+30%") -> 
         "duration": duration,
         "sentences": boundaries,
     }
-
