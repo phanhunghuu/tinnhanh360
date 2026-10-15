@@ -191,7 +191,20 @@ Trả về duy nhất định dạng JSON sau (KHÔNG bọc trong markdown ```js
   }}
 ]
 """
-        resp = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+        model_candidates = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash"]
+        resp = None
+        for m in model_candidates:
+            try:
+                resp = client.models.generate_content(model=m, contents=prompt)
+                if resp and resp.text:
+                    break
+            except Exception as me:
+                print(f"Model {m} failed: {me}")
+                continue
+
+        if not resp or not resp.text:
+            return []
+
         raw = resp.text.strip()
         raw = re.sub(r'^```json\s*', '', raw)
         raw = re.sub(r'^```\s*', '', raw)
