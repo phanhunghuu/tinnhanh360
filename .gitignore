@@ -1,0 +1,23 @@
+# Bỏ môi trường ảo Python
+venv/
+.venv/
+env/
+
+# Bỏ cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Bỏ thư mục đầu ra video render & test tạm thời
+outputs/
+test_output/
+*.mp4
+*.mp3
+*.jpg
+*.png
+!assets/*.png
+!assets/*.jpg
+
+# File hệ điều hành
+.DS_Store
+Thumbs.db
