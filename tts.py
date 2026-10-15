@@ -151,6 +151,19 @@ def generate_tts(
         edge_voice = voice if not voice.startswith("zalo-") else "vi-VN-HoaiMyNeural"
         boundaries = _run_in_thread(_stream_edge_tts(text, edge_voice, audio_path, rate=rate))
 
+    # Chuẩn hóa âm thanh đầu ra về chuẩn 44100Hz Stereo MP3
+    try:
+        norm_temp = audio_path + ".norm.mp3"
+        subprocess.run([
+            "ffmpeg", "-y", "-i", audio_path,
+            "-ar", "44100", "-ac", "2", "-b:a", "192k",
+            norm_temp
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if os.path.exists(norm_temp) and os.path.getsize(norm_temp) > 200:
+            os.replace(norm_temp, audio_path)
+    except Exception as ne:
+        print(f"Normalize audio error: {ne}")
+
     # Đo duration thực tế
     try:
         probe = subprocess.check_output([

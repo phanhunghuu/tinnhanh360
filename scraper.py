@@ -24,7 +24,8 @@ def _get_article_images_from_html(soup: BeautifulSoup, base_url: str) -> list:
     skip_keywords = [
         '.svg', '.ico', 'logo', 'avatar', 'icon', 'banner', 'sprite',
         'button', 'ads', 'advertis', 'thumb_social', 'pixel', 'tracking',
-        'facebook', 'twitter', 'zalo', 'share', 'related', 'widget'
+        'facebook', 'twitter', 'zalo', 'share', 'related', 'widget',
+        'nguonuutien', 'graphics', 'graphic', 'preference', 'google-news', 'follow_us'
     ]
 
     # Các selector vùng nội dung bài báo phổ biến trên báo Việt Nam

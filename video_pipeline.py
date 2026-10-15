@@ -217,10 +217,16 @@ def render_full_video(
         bg_images.append(default_bg)
 
     clip_paths = []
+    # Danh sách hiệu ứng phong phú để hoán đổi nếu dùng lại 1 ảnh
+    motion_cycle = ["zoom_in", "pan", "zoom_out"]
 
     for idx, (scene, tts) in enumerate(zip(scenes, tts_results)):
         sc_type  = scene.get("type", "news_detail")
-        motion   = scene.get("motion", "zoom_in")
+        # Luân phiên hiệu ứng để dù bài chỉ có 1 ảnh thì mỗi cảnh vẫn chuyển động khác nhau
+        motion   = scene.get("motion") or motion_cycle[idx % len(motion_cycle)]
+        if len(bg_images) == 1 and sc_type != "title_hero":
+            motion = motion_cycle[idx % len(motion_cycle)]
+
         headline = scene.get("headline", "")
         text     = scene.get("text", "")
         duration = tts["duration"] + 0.35
@@ -296,10 +302,12 @@ def render_full_video(
 
     raw_concat_video = os.path.join(work_dir, "concat_temp.mp4") if (bgm_path and os.path.exists(bgm_path)) else final_output_path
 
+    # Concat clips: copy video, re-encode audio để đảm bảo toàn bộ clip cùng sample-rate 44100Hz stereo
     subprocess.run([
         "ffmpeg", "-y",
         "-f", "concat", "-safe", "0", "-i", concat_list,
-        "-c", "copy",
+        "-c:v", "copy",
+        "-c:a", "aac", "-ar", "44100", "-ac", "2", "-b:a", "192k",
         raw_concat_video
     ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -313,7 +321,8 @@ def render_full_video(
             "-stream_loop", "-1", "-i", bgm_path,
             "-filter_complex", filter_complex,
             "-map", "0:v", "-map", "[aout]",
-            "-c:v", "copy", "-c:a", "aac",
+            "-c:v", "copy",
+            "-c:a", "aac", "-ar", "44100", "-ac", "2", "-b:a", "192k",
             final_output_path
         ]
         subprocess.run(cmd_mix, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

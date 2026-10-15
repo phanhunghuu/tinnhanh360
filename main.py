@@ -41,7 +41,7 @@ class RenderRequest(BaseModel):
     source: str
     images: List[str] = []
     scenes: List[dict]
-    voice: str = "vi-VN-HoaiMyNeural"
+    voice: str = "zalo-3"
     zalo_key: Optional[str] = "c6B974D16LbRHcSR1hRGGswtXV0LUOr6"
     use_bgm: bool = True
     bgm_volume: float = 0.15
