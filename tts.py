@@ -141,14 +141,18 @@ def generate_tts(
     boundaries = []
     use_zalo = voice.startswith("zalo-") and bool(zalo_api_key)
 
+    # Ánh xạ giới tính khi cần fallback sang Edge-TTS
+    is_male = voice in ["zalo-3", "zalo-4", "vi-VN-NamMinhNeural"]
+    edge_fallback_voice = "vi-VN-NamMinhNeural" if is_male else "vi-VN-HoaiMyNeural"
+
     if use_zalo:
         success = _generate_zalo_tts(text, voice, audio_path, zalo_api_key, speed=1.1)
         if not success:
-            print("Zalo AI failed, fallbacking to Edge-TTS...")
-            boundaries = _run_in_thread(_stream_edge_tts(text, "vi-VN-HoaiMyNeural", audio_path, rate=rate))
+            print(f"Zalo AI failed, fallbacking to Edge-TTS ({edge_fallback_voice})...")
+            boundaries = _run_in_thread(_stream_edge_tts(text, edge_fallback_voice, audio_path, rate=rate))
     else:
         # Nếu chọn Edge-TTS
-        edge_voice = voice if not voice.startswith("zalo-") else "vi-VN-HoaiMyNeural"
+        edge_voice = voice if not voice.startswith("zalo-") else edge_fallback_voice
         boundaries = _run_in_thread(_stream_edge_tts(text, edge_voice, audio_path, rate=rate))
 
     # Chuẩn hóa âm thanh đầu ra về chuẩn 44100Hz Stereo MP3

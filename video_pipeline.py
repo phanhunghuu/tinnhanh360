@@ -229,7 +229,8 @@ def render_full_video(
 
         headline = scene.get("headline", "")
         text     = scene.get("text", "")
-        duration = tts["duration"] + 0.35
+        # Khớp chính xác thời lượng audio để frame chuyển ngay khi voice vừa đọc xong câu
+        duration = tts["duration"]
 
         clip_out = os.path.join(work_dir, f"clip_{idx:02d}.mp4")
         current_photo = bg_images[idx % len(bg_images)]

@@ -44,7 +44,7 @@ class RenderRequest(BaseModel):
     voice: str = "zalo-3"
     zalo_key: Optional[str] = "c6B974D16LbRHcSR1hRGGswtXV0LUOr6"
     use_bgm: bool = True
-    bgm_volume: float = 0.15
+    bgm_volume: float = 0.10
 
 
 @app.post("/api/upload-bgm")
@@ -74,7 +74,7 @@ def bgm_status():
     return {
         "has_bgm": has_bgm,
         "size_kb": size_kb,
-        "default_volume": 0.15
+        "default_volume": 0.10
     }
 
 
