@@ -124,14 +124,22 @@ def render_scene_clip(
     output_path: str,
     inset: Optional[dict] = None,
     fps: int = 24,
+    is_last_scene: bool = False,
 ):
     """
     Dựng 1 scene clip:
     - Nếu có overlay_path + inset: Zoompan ảnh BÊN TRONG khung bo tròn.
-      FFmpeg: zoompan photo → pad vào vị trí inset → overlay PNG (có lỗ trống) lên trên.
     - Nếu không có overlay_path: Video tĩnh từ ảnh đã render (Follow frame).
+    - Nếu is_last_scene=True: Áp dụng hiệu ứng fade out (hình ảnh tối dần về màu đen ở 1 giây cuối).
     """
     num_frames = int(duration * fps) + 2
+
+    # Tính điểm bắt đầu fade out hình ảnh nếu là frame cuối
+    v_fade = ""
+    if is_last_scene:
+        fade_dur = min(1.0, duration / 2.0)
+        st = max(0.0, duration - fade_dur)
+        v_fade = f",fade=t=out:st={st:.2f}:d={fade_dur:.2f}"
 
     if overlay_path and inset:
         # ── ZOOMPAN TRONG KHUNG INSET ──
@@ -142,14 +150,10 @@ def render_scene_clip(
 
         zoompan = _build_inset_zoompan_filter(motion, fps, num_frames, iw, ih)
 
-        # Filter complex:
-        # [0] = ảnh gốc → zoompan tại kích thước inset → pad ra 1080x1920 tại vị trí inset
-        # [1] = overlay PNG (RGBA, có lỗ trống bo tròn) → đè lên trên
-        # Kết quả: ảnh chỉ hiện qua lỗ trống = zoom/pan trong khung
         filter_complex = (
             f"[0:v]{zoompan}[zpan];"
             f"[zpan]pad=1080:1920:{ix}:{iy}:color=black[photo];"
-            f"[photo][1:v]overlay=0:0:format=auto,setsar=1[out]"
+            f"[photo][1:v]overlay=0:0:format=auto,setsar=1{v_fade}[out]"
         )
 
         cmd = [
@@ -166,11 +170,12 @@ def render_scene_clip(
         ]
     else:
         # ── FRAME TĨNH (Follow, hoặc fallback) ──
+        filter_str = f"scale=1080:1920,setsar=1{v_fade}"
         cmd = [
             "ffmpeg", "-y",
             "-loop", "1", "-i", photo_path,
             "-i", audio_path,
-            "-vf", "scale=1080:1920,setsar=1",
+            "-vf", filter_str,
             "-map", "0:v", "-map", "1:a",
             "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "192k",
@@ -273,7 +278,7 @@ def render_full_video(
             )
 
         elif sc_type == "follow":
-            # FRAME CUỐI: Tĩnh, không có khung ảnh
+            # FRAME CUỐI: Tĩnh, không có khung ảnh + hiệu ứng fade out tối dần ở cuối
             follow_img_path = os.path.join(work_dir, f"frame_{idx:02d}_follow.jpg")
             create_follow_frame_image(follow_img_path)
             render_scene_clip(
@@ -285,6 +290,7 @@ def render_full_video(
                 output_path=clip_out,
                 inset=None,
                 fps=fps,
+                is_last_scene=(idx == len(scenes) - 1),
             )
 
         else:
@@ -307,6 +313,7 @@ def render_full_video(
                 output_path=clip_out,
                 inset=result["inset"],
                 fps=fps,
+                is_last_scene=(idx == len(scenes) - 1),
             )
 
         clip_paths.append(clip_out)
