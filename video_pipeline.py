@@ -171,12 +171,15 @@ def render_full_video(
     os.makedirs(work_dir, exist_ok=True)
     date_str = get_current_date_str()
 
-    # Tải các ảnh bài báo
+    # Tải TẤT CẢ ảnh bài báo (không giới hạn) - ưu tiên dùng hết hình có trong bài
     bg_images = []
-    for idx, url in enumerate(article_images[:8]):
+    for idx, url in enumerate(article_images):
         dest = os.path.join(work_dir, f"bg_{idx}.jpg")
         if download_file(url, dest):
             bg_images.append(dest)
+        # Giới hạn tối đa 15 hình để tránh quá tải
+        if len(bg_images) >= 15:
+            break
 
     if not bg_images:
         default_bg = os.path.join(work_dir, "bg_default.jpg")

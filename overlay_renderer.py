@@ -319,23 +319,25 @@ def create_detail_frame_image(
     # Logo trắng góc trên phải
     _draw_logo(canvas, is_dark_bg=True, target_w=250, top=130, right=90)
 
-    # Nội dung tóm tắt chi tiết: Cỡ chữ nhỏ lại một chút (50px), giảm giãn cách dòng để hiển thị trọn vẹn câu
-    font_size = 50
-    font_content = _font_bold(font_size)
-    content_max_w = W - 260  # Rộng ~820px
-    content_lines = _wrap(content_text, font_content, content_max_w, draw)
-
-    # Nếu câu dài quá 4 dòng, co nhẹ xuống 44px để không chạm vào ngày đăng
-    if len(content_lines) > 4:
-        font_size = 44
-        font_content = _font_bold(font_size)
-        content_lines = _wrap(content_text, font_content, content_max_w, draw)
-
+    # Nội dung tóm tắt chi tiết: tự động co font để vừa màn hình
+    # Thứ tự thử: 52 → 46 → 40 → 34px, đảm bảo không đè vào Ngày đăng (y=1640)
     text_start_y = 1220
-    line_h = font_size + 16  # Giảm giãn cách dòng
+    max_text_bottom = 1620  # Giữ khoảng trống 20px trước ngày đăng
+
+    for font_size in [52, 46, 40, 34]:
+        font_content = _font_bold(font_size)
+        content_max_w = W - 260  # Rộng ~820px
+        content_lines = _wrap(content_text, font_content, content_max_w, draw)
+        line_h = font_size + 14  # Giãn cách dòng tối giản
+        total_text_h = len(content_lines) * line_h
+        if text_start_y + total_text_h <= max_text_bottom:
+            break  # Vừa vặn, dùng font size này
 
     for i, line in enumerate(content_lines):
         y = text_start_y + i * line_h
+        # Dừng vẽ nếu chạm mốc cuối
+        if y + line_h > max_text_bottom:
+            break
         draw.text((150, y + 2), line, font=font_content, fill=(0, 0, 0, 180))
         draw.text((148, y), line, font=font_content, fill=(255, 255, 255, 255))
 
