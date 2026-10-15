@@ -212,8 +212,13 @@ def _groq_generate_scenes(title: str, content: str, source: str, duration: int, 
     import ssl
 
     prompt = f"""Bạn là biên tập viên tin tức video thời sự chuyên nghiệp.
-Hãy phân tích bài báo sau và tạo kịch bản video TikTok 9:16 thật hấp dẫn, kịch tính, mạch lạc, nêu đầy đủ cốt truyện chính:
-Mâu thuẫn -> Diễn biến gây án -> Hậu quả/Nạn nhân tử vong -> Khởi tố bắt giam.
+Hãy phân tích bài báo sau và tạo kịch bản video TikTok 9:16 thật hấp dẫn, kịch tính, mạch lạc theo đúng dòng thời gian thực tế:
+1. Scene 1: type="title_hero", headline="{title}", text="{title}" (Bắt buộc giữ nguyên 100% tiêu đề gốc bài báo, không cắt bớt).
+2. Scene 2 (Bối cảnh ban đầu): type="news_detail", headline="BỐI CẢNH VỤ VIỆC", bắt buộc nêu rõ thời gian, địa điểm, hoàn cảnh ban đầu (ai, ở đâu, khi nào, đang làm gì thì phát sinh việc) để khán giả nắm rõ ngữ cảnh.
+3. Scene 3 (Diễn biến xô xát): type="news_detail", headline="DIỄN BIẾN VỤ ÁN", nêu tiếp diễn biến mâu thuẫn, hành vi chặn đường, gây sự hoặc xô xát.
+4. Scene 4 (Hành vi gây án & Hậu quả): type="news_detail", headline="HÀNH VI GÂY ÁN", nêu rõ hành động nguy hiểm, hung khí và hậu quả thương tích/tử vong.
+5. Scene 5 (Khởi tố / Xử lý pháp luật): type="news_detail", headline="KẾT QUẢ ĐIỀU TRA", nêu việc cơ quan điều tra/công an khởi tố, bắt giữ hoặc xét xử.
+6. Scene cuối: type="follow", headline="THEO DÕI ĐỂ XEM THÊM", text="Bấm theo dõi kênh để cập nhật liên tục các tin tức nóng nhất."
 
 BẮT BUỘC trả về đúng định dạng JSON Array các đối tượng sau (KHÔNG dùng markdown ```json, CHỈ xuất JSON thuần):
 [
@@ -227,26 +232,33 @@ BẮT BUỘC trả về đúng định dạng JSON Array các đối tượng sa
   {{
     "id": 2,
     "type": "news_detail",
-    "headline": "MÂU THUẪN GÂY GỔ",
-    "text": "1 câu tóm tắt mâu thuẫn dẫn đến việc xô xát.",
+    "headline": "BỐI CẢNH VỤ VIỆC",
+    "text": "1 câu nêu rõ thời gian, địa điểm và hoàn cảnh khởi nguồn sự việc.",
     "motion": "pan"
   }},
   {{
     "id": 3,
     "type": "news_detail",
-    "headline": "HÀNH VI GÂY ÁN",
-    "text": "1 câu tóm tắt hành vi gây án nguy hiểm và hậu quả.",
+    "headline": "DIỄN BIẾN VỤ ÁN",
+    "text": "1 câu nêu diễn biến mâu thuẫn dẫn tới xô xát.",
     "motion": "zoom_out"
   }},
   {{
     "id": 4,
     "type": "news_detail",
-    "headline": "KẾT QUẢ ĐIỀU TRA",
-    "text": "1 câu tóm tắt việc cơ quan công an khởi tố bắt giữ.",
+    "headline": "HÀNH VI GÂY ÁN",
+    "text": "1 câu nêu hành vi gây thương tích/tử vong và hung khí.",
     "motion": "pan"
   }},
   {{
     "id": 5,
+    "type": "news_detail",
+    "headline": "KẾT QUẢ ĐIỀU TRA",
+    "text": "1 câu tóm tắt việc cơ quan công an khởi tố bắt giữ.",
+    "motion": "zoom_out"
+  }},
+  {{
+    "id": 6,
     "type": "follow",
     "headline": "THEO DÕI ĐỂ XEM THÊM",
     "text": "Bấm theo dõi kênh để cập nhật liên tục các tin tức nóng nhất.",
@@ -256,8 +268,9 @@ BẮT BUỘC trả về đúng định dạng JSON Array các đối tượng sa
 
 QUY TẮC CẦN TUÂN THỦ TUYỆT ĐỐI:
 1. Scene 1: type="title_hero", headline và text bắt buộc giữ nguyên 100% tiêu đề bài báo gốc, không cắt bớt!
-2. Mỗi Scene news_detail chỉ gồm DUY NHẤT 1 CÂU HOÀN CHỈNH, ngắn gọn, súc tích (18-35 từ), nêu đúng thông tin cốt lõi, loại bỏ các chi tiết vụn vặt như ăn nhậu ai nói qua nói lại.
-3. Scene cuối cùng bắt buộc là follow.
+2. Phải có bối cảnh khởi nguồn (ai, làm gì, ở đâu, khi nào) trước khi vào pha gay cấn, giúp video có mở bài - thân bài - kết bài chuẩn nghiệp vụ báo chí.
+3. Mỗi Scene news_detail chỉ gồm DUY NHẤT 1 CÂU HOÀN CHỈNH, ngắn gọn, súc tích (18-35 từ), từ ngữ dứt khoát.
+4. Scene cuối cùng bắt buộc là follow.
 
 BÀI BÁO:
 Tiêu đề: {title}
