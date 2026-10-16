@@ -391,7 +391,7 @@
         <div class="scene-item-body">
           ${!isFollow ? `
           <!-- KHU VỰC CHỌN & DUYỆT ẢNH CHO FRAME -->
-          <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:10px 12px;margin-bottom:12px;">
+          <div id="sceneImgBox_${i}" tabindex="0" onpaste="handleScenePaste(event, ${i})" style="background:rgba(255,255,255,0.03);border:1px dashed rgba(255,255,255,0.15);border-radius:10px;padding:10px 12px;margin-bottom:12px;outline:none;transition:border-color .2s;" onfocus="this.style.borderColor='#38bdf8'" onblur="this.style.borderColor='rgba(255,255,255,0.15)'">
             <div style="font-size:12px;font-weight:600;color:#93c5fd;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
               <span>🖼️ Hình ảnh cho Frame này:</span>
               <span id="imgStatus_${i}" style="font-size:11px;color:#94a3b8;font-weight:normal;"></span>
@@ -406,12 +406,15 @@
                     ${articleImages.map((imgUrl, imgIdx) => `<option value="${imgUrl}" ${imgUrl===activeImg ? 'selected':''}>Ảnh ${imgIdx+1}: ${imgUrl.substring(imgUrl.lastIndexOf('/')+1, imgUrl.lastIndexOf('/')+25)}...</option>`).join('')}
                   </select>
                 </div>` : ''}
-                <div style="display:flex;align-items:center;gap:8px;">
+                <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;">
                   <label style="font-size:11px;color:#38bdf8;cursor:pointer;background:rgba(56,189,248,0.1);padding:4px 10px;border-radius:6px;border:1px solid rgba(56,189,248,0.25);">
-                    📁 Tải ảnh khác lên...
+                    📁 Tải ảnh lên...
                     <input type="file" accept="image/*" style="display:none;" onchange="uploadSceneImage(${i}, this)">
                   </label>
-                  <span style="font-size:11px;color:#64748b;">(JPG, PNG)</span>
+                  <button type="button" onclick="pasteFromClipboard(${i})" style="font-size:11px;color:#4ade80;cursor:pointer;background:rgba(74,222,128,0.1);padding:4px 10px;border-radius:6px;border:1px solid rgba(74,222,128,0.3);">
+                    📋 Dán ảnh (Ctrl+V)
+                  </button>
+                  <span style="font-size:11px;color:#64748b;">(Click vào đây rồi bấm Ctrl+V)</span>
                 </div>
               </div>
             </div>
@@ -440,9 +443,7 @@
     }
   }
 
-  async function uploadSceneImage(sceneIdx, input) {
-    if (!input.files || input.files.length === 0) return;
-    const file = input.files[0];
+  async function uploadFileBlob(sceneIdx, file) {
     const formData = new FormData();
     formData.append('file', file);
 
@@ -463,10 +464,53 @@
         preview.src = data.url;
         preview.style.display = 'block';
       }
-      if (statusEl) statusEl.innerText = '✅ Đã đổi ảnh';
+      if (statusEl) statusEl.innerText = '✅ Đã dán ảnh thành công';
     } catch (e) {
-      alert('❌ Lỗi upload ảnh: ' + e.message);
+      alert('❌ Lỗi tải ảnh: ' + e.message);
       if (statusEl) statusEl.innerText = 'Lỗi upload';
+    }
+  }
+
+  async function uploadSceneImage(sceneIdx, input) {
+    if (!input.files || input.files.length === 0) return;
+    await uploadFileBlob(sceneIdx, input.files[0]);
+  }
+
+  function handleScenePaste(e, sceneIdx) {
+    const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+    for (const item of items) {
+      if (item.type.indexOf('image') !== -1) {
+        e.preventDefault();
+        const blob = item.getAsFile();
+        uploadFileBlob(sceneIdx, blob);
+        return;
+      }
+    }
+  }
+
+  async function pasteFromClipboard(sceneIdx) {
+    try {
+      if (!navigator.clipboard || !navigator.clipboard.read) {
+        // Fallback: nhắc người dùng nhấn Ctrl+V trực tiếp
+        const box = document.getElementById(`sceneImgBox_${sceneIdx}`);
+        if (box) box.focus();
+        alert('👉 Bạn hãy bấm chuột vào khung này rồi nhấn phím Ctrl + V để dán ảnh!');
+        return;
+      }
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const imageType = item.types.find(type => type.startsWith('image/'));
+        if (imageType) {
+          const blob = await item.getType(imageType);
+          await uploadFileBlob(sceneIdx, blob);
+          return;
+        }
+      }
+      alert('⚠️ Không tìm thấy ảnh trong bộ nhớ tạm (Clipboard). Bạn hãy copy ảnh (chuột phải chọn "Sao chép hình ảnh") rồi bấm dán lại nhé!');
+    } catch (err) {
+      const box = document.getElementById(`sceneImgBox_${sceneIdx}`);
+      if (box) box.focus();
+      alert('👉 Bạn hãy bấm chuột vào khung này rồi nhấn phím Ctrl + V để dán ảnh!');
     }
   }
 
