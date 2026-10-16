@@ -1,3 +1,13 @@
+---
+title: AI News Video Maker Pro
+emoji: 🎥
+colorFrom: red
+colorTo: gray
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # AI News Video Maker Pro
 
 Dự án tự động chuyển đổi bài báo thành video ngắn dạng dọc 9:16 (TikTok, Reels, Shorts) theo chuẩn đồ họa thời sự.
