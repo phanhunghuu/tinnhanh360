@@ -60,7 +60,7 @@ def parse_article_to_scenes(
     content = article.get("content", "")
     source  = article.get("source", "Tin tức")
 
-    # Mặc định dùng Groq AI (miễn phí, siêu nhanh và tóm tắt cực thông minh)
+    # Mặc định tự động đọc Groq AI key từ file .env hoặc biến môi trường
     groq_key = api_key if (api_key and api_key.startswith("gsk_")) else None
     if not groq_key:
         groq_key = os.getenv("GROQ_API_KEY")
