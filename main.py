@@ -102,8 +102,8 @@ def bgm_status():
 async def parse_article(req: ParseRequest):
     try:
         article = extract_article_content(req.url_or_text)
-        if not article["content"] or len(article["content"]) < 20:
-            raise Exception("Không đọc được nội dung bài báo.")
+        if not article["content"] or len(article["content"].strip()) < 20 or article["content"].startswith("Không thể đọc nội dung"):
+            raise Exception(f"Không cào được chữ từ link (nội dung rỗng hoặc bị trang báo chặn/yêu cầu captcha). Hãy thử dán trực tiếp đoạn văn bản bài báo vào ô.")
         parsed = parse_article_to_scenes(
             article,
             duration_seconds=req.duration,
@@ -111,6 +111,8 @@ async def parse_article(req: ParseRequest):
         )
         return {"success": True, "data": parsed}
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=400, detail=str(e))
 
 

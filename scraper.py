@@ -165,10 +165,22 @@ def extract_article_content(url_or_text: str):
     }
     
     html = ""
+    session = requests.Session()
     try:
-        resp = requests.get(url, headers=headers, timeout=15)
+        resp = session.get(url, headers=headers, timeout=15)
         resp.raise_for_status()
         html = resp.text
+
+        # Bỏ qua thử thách JS cookie challenge của Cloudrity/WAF (ví dụ: Lao Động, Thanh Niên...)
+        # document.cookie="D1N=64b19392795e66f6da64aa5e87191caa"; expires=...; window.location.reload(true);
+        if "document.cookie" in html and "window.location.reload" in html:
+            c_match = re.search(r'document\.cookie\s*=\s*["\']([^="\'\s]+)=([^;"\'\s]+)', html)
+            if c_match:
+                c_name, c_val = c_match.group(1), c_match.group(2)
+                session.cookies.set(c_name, c_val, domain=urlparse(url).netloc)
+                retry_resp = session.get(url, headers=headers, timeout=15)
+                if retry_resp.status_code == 200 and len(retry_resp.text) > len(html):
+                    html = retry_resp.text
     except Exception:
         downloaded = trafilatura.fetch_url(url)
         if downloaded:
