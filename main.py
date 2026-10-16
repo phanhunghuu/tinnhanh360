@@ -114,16 +114,25 @@ async def parse_article(req: ParseRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-# In-memory storage for render jobs
+# Storage for render jobs (in-memory + disk persistent)
 jobs_status = {}
+import json
 
 def update_job_progress(job_id: str, step: str, message: str, percent: int):
-    if job_id in jobs_status:
-        jobs_status[job_id].update({
-            "step": step,
-            "message": message,
-            "percent": percent,
-        })
+    if job_id not in jobs_status:
+        jobs_status[job_id] = {}
+    jobs_status[job_id].update({
+        "step": step,
+        "message": message,
+        "percent": percent,
+    })
+    try:
+        jdir = os.path.join(OUTPUT_DIR, job_id)
+        os.makedirs(jdir, exist_ok=True)
+        with open(os.path.join(jdir, "status.json"), "w", encoding="utf-8") as f:
+            json.dump(jobs_status[job_id], f, ensure_ascii=False)
+    except Exception:
+        pass
 
 
 def execute_render_job(job_id: str, req_data: dict):
@@ -220,9 +229,21 @@ async def render_video(req: RenderRequest):
 
 @app.get("/api/render-status/{job_id}")
 def get_render_status(job_id: str):
-    if job_id not in jobs_status:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return jobs_status[job_id]
+    if job_id in jobs_status:
+        return jobs_status[job_id]
+    
+    # Fallback kiểm tra file status.json từ ổ đĩa
+    status_file = os.path.join(OUTPUT_DIR, job_id, "status.json")
+    if os.path.exists(status_file):
+        try:
+            with open(status_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                jobs_status[job_id] = data
+                return data
+        except Exception:
+            pass
+            
+    raise HTTPException(status_code=404, detail="Job not found")
 
 
 @app.get("/")
