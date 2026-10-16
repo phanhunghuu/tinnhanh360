@@ -162,10 +162,32 @@
       display: none; width: 100%; max-width: 300px; height: 540px;
       border-radius: 14px; background: #000; box-shadow: 0 18px 40px rgba(0,0,0,.6);
     }
+    .action-btns {
+      display: flex; gap: 10px; width: 100%; margin-top: 14px;
+    }
     .dl-btn {
-      display: none; margin-top: 14px; padding: 10px 22px;
-      background: var(--primary); color: #fff; text-decoration: none;
-      border-radius: 9px; font-weight: 700; font-size: 13px; text-align: center;
+      display: none; flex: 1; padding: 12px 16px;
+      background: var(--surface2); color: #fff; text-decoration: none;
+      border: 1px solid rgba(255,255,255,.1); border-radius: 10px;
+      font-weight: 700; font-size: 13px; text-align: center;
+      transition: all .2s;
+    }
+    .dl-btn:hover { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.2); }
+    .yt-btn {
+      display: none; flex: 1.2; padding: 12px 16px;
+      background: linear-gradient(135deg, #dc2626, #b91c1c); color: #fff;
+      border: none; border-radius: 10px; cursor: pointer;
+      font-weight: 700; font-size: 13px; text-align: center;
+      box-shadow: 0 4px 14px rgba(220,38,38,.35);
+      transition: all .2s;
+    }
+    .yt-btn:hover {
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      box-shadow: 0 6px 20px rgba(220,38,38,.5);
+      transform: translateY(-1px);
+    }
+    .yt-btn:disabled {
+      opacity: 0.5; cursor: not-allowed; transform: none;
     }
 
     .spinner {
@@ -310,7 +332,15 @@
         </div>
         <video id="videoEl" controls playsinline></video>
       </div>
-      <a class="dl-btn" id="dlBtn" href="#" download="news_video.mp4">⬇️ Tải Video Về Máy</a>
+
+      <div class="action-btns">
+        <a class="dl-btn" id="dlBtn" href="#" download="news_video.mp4">⬇️ Tải Về Máy</a>
+        <button class="yt-btn" id="ytBtn" onclick="uploadToYouTube()">
+          <span id="ytIcon">▶️</span> <span id="ytText">Đăng YouTube Shorts</span>
+        </button>
+      </div>
+
+      <div id="ytResultBox" style="display:none; margin-top:12px; padding:12px 14px; border-radius:10px; font-size:13px; line-height:1.5;"></div>
     </div>
   </div>
 </div>
@@ -722,6 +752,14 @@
             }
             dlBtn.style.display = 'block';
 
+            // Hiển thị nút đăng YouTube Shorts
+            const ytBtn = document.getElementById('ytBtn');
+            if (ytBtn) {
+              ytBtn.style.display = 'block';
+              ytBtn.dataset.videoUrl = sData.video_url;
+              ytBtn.dataset.videoTitle = (currentData && currentData.title) ? currentData.title : 'Tin tức 24h';
+            }
+
             btn.disabled = false;
             document.getElementById('renderIcon').innerText = '🚀';
             document.getElementById('renderText').innerText = 'Render Lại Video';
@@ -747,6 +785,63 @@
       statusText.innerHTML = '❌ <strong>Lỗi:</strong> ' + e.message;
       statusBox.style.borderColor = 'rgba(239,68,68,.4)';
       statusBox.style.background = 'rgba(239,68,68,.1)';
+    }
+  }
+
+  /* ── 1-Click Upload to YouTube Shorts ──────────────────────── */
+  async function uploadToYouTube() {
+    const ytBtn = document.getElementById('ytBtn');
+    const resultBox = document.getElementById('ytResultBox');
+    const videoUrl = ytBtn.dataset.videoUrl;
+    const title = ytBtn.dataset.videoTitle || (currentData ? currentData.title : 'Bản tin nóng 24h');
+
+    if (!videoUrl) {
+      alert('Không tìm thấy link video để upload!');
+      return;
+    }
+
+    ytBtn.disabled = true;
+    document.getElementById('ytIcon').innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span>';
+    document.getElementById('ytText').innerText = 'Đang tải lên YouTube...';
+
+    resultBox.style.display = 'block';
+    resultBox.style.background = 'rgba(59,130,246,0.1)';
+    resultBox.style.border = '1px solid rgba(59,130,246,0.3)';
+    resultBox.style.color = '#93c5fd';
+    resultBox.innerHTML = '⏳ <strong>Đang kết nối YouTube API...</strong><br><span style="font-size:11px;color:#cbd5e1;">(Nếu là lần đầu tiên, trình duyệt sẽ mở tab Google để bạn cấp quyền đăng video vào kênh của mình).</span>';
+
+    try {
+      const res = await fetch('/api/upload-youtube', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          video_url: videoUrl,
+          title: title,
+          description: `${title}\n\nNguồn: ${currentData ? currentData.source : 'Tổng hợp'}\n#Shorts #tintuc24h #thoisu #tinnhanh`,
+          privacy: 'public'
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Lỗi không xác định khi upload');
+
+      resultBox.style.background = 'rgba(34,197,94,0.15)';
+      resultBox.style.border = '1px solid rgba(34,197,94,0.4)';
+      resultBox.style.color = '#86efac';
+      resultBox.innerHTML = `🎉 <strong>Đăng YouTube Shorts thành công!</strong><br>
+        <span style="font-size:12px;color:#f1f5f9;">Tiêu đề: <em>${data.title}</em></span><br>
+        <a href="${data.video_url}" target="_blank" style="display:inline-block; margin-top:6px; color:#38bdf8; font-weight:700; text-decoration:underline;">
+          👉 Bấm vào đây để xem video trên YouTube Shorts
+        </a>`;
+    } catch (err) {
+      resultBox.style.background = 'rgba(239,68,68,0.15)';
+      resultBox.style.border = '1px solid rgba(239,68,68,0.4)';
+      resultBox.style.color = '#fca5a5';
+      resultBox.innerHTML = `❌ <strong>Lỗi upload YouTube:</strong> ${err.message}`;
+    } finally {
+      ytBtn.disabled = false;
+      document.getElementById('ytIcon').innerText = '▶️';
+      document.getElementById('ytText').innerText = 'Đăng YouTube Shorts';
     }
   }
 </script>

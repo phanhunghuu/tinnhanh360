@@ -25,3 +25,5 @@ Thumbs.db
 server.log
 *.wav
 assets/default_bgm.mp3
+client_secrets.json
+youtube_token.json

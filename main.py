@@ -116,6 +116,52 @@ def bgm_status():
     }
 
 
+from youtube_uploader import is_youtube_configured, is_youtube_authenticated, upload_to_youtube
+
+class YouTubeUploadRequest(BaseModel):
+    video_url: str
+    title: str
+    description: Optional[str] = ""
+    privacy: str = "public"  # 'public', 'unlisted', or 'private'
+
+
+@app.get("/api/youtube-status")
+def youtube_status():
+    """Kiểm tra trạng thái cấu hình YouTube OAuth và token."""
+    return {
+        "configured": is_youtube_configured(),
+        "authenticated": is_youtube_authenticated(),
+    }
+
+
+@app.post("/api/upload-youtube")
+def upload_youtube_endpoint(req: YouTubeUploadRequest):
+    """Đăng video lên YouTube Shorts."""
+    try:
+        # Đường dẫn file video từ video_url dạng /outputs/{job_id}/{filename}
+        clean_url = req.video_url.lstrip("/")
+        if clean_url.startswith("outputs/"):
+            rel_path = clean_url[len("outputs/"):]
+        else:
+            rel_path = clean_url
+        video_abs_path = os.path.join(OUTPUT_DIR, rel_path)
+
+        if not os.path.exists(video_abs_path):
+            raise Exception(f"Không tìm thấy file video trên server: {video_abs_path}")
+
+        result = upload_to_youtube(
+            video_path=video_abs_path,
+            title=req.title,
+            description=req.description,
+            privacy_status=req.privacy
+        )
+        return result
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.post("/api/parse-article")
 async def parse_article(req: ParseRequest):
     try:
