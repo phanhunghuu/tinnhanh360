@@ -150,37 +150,40 @@ def render_scene_clip(
 
         zoompan = _build_inset_zoompan_filter(motion, fps, num_frames, iw, ih)
 
+        # Scale xuống chuẩn 720x1280 để tiết kiệm 60% RAM, tránh crash trên Cloud Free
         filter_complex = (
             f"[0:v]{zoompan}[zpan];"
             f"[zpan]pad=1080:1920:{ix}:{iy}:color=black[photo];"
-            f"[photo][1:v]overlay=0:0:format=auto,setsar=1{v_fade}[out]"
+            f"[photo][1:v]overlay=0:0:format=auto,scale=720:1280,setsar=1{v_fade}[out]"
         )
 
         cmd = [
             "ffmpeg", "-y",
-            "-threads", "2",
+            "-threads", "1",
             "-loop", "1", "-i", photo_path,       # Ảnh gốc bài báo
             "-loop", "1", "-i", overlay_path,      # Overlay PNG (RGBA, lỗ trống)
             "-i", audio_path,                      # Audio
             "-filter_complex", filter_complex,
             "-map", "[out]", "-map", "2:a",
-            "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
-            "-c:a", "aac", "-b:a", "192k",
+            "-c:v", "libx264", "-preset", "ultrafast", "-tune", "fastdecode", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", "128k",
+            "-max_muxing_queue_size", "1024",
             "-t", f"{duration:.4f}",
             output_path
         ]
     else:
         # ── FRAME TĨNH (Follow, hoặc fallback) ──
-        filter_str = f"scale=1080:1920,setsar=1{v_fade}"
+        filter_str = f"scale=720:1280,setsar=1{v_fade}"
         cmd = [
             "ffmpeg", "-y",
-            "-threads", "2",
+            "-threads", "1",
             "-loop", "1", "-i", photo_path,
             "-i", audio_path,
             "-vf", filter_str,
             "-map", "0:v", "-map", "1:a",
             "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
-            "-c:a", "aac", "-b:a", "192k",
+            "-c:a", "aac", "-b:a", "128k",
+            "-max_muxing_queue_size", "1024",
             "-t", f"{duration:.4f}",
             output_path
         ]
@@ -320,6 +323,9 @@ def render_full_video(
             )
 
         clip_paths.append(clip_out)
+        import gc
+        gc.collect()
+
         if progress_callback:
             progress_callback(
                 "render_clip",
