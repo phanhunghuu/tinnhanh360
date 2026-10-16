@@ -58,33 +58,55 @@ def _get_article_images_from_html(soup: BeautifulSoup, base_url: str) -> list:
     def extract_imgs_from_area(area):
         found = []
         for img in area.find_all("img"):
-            src = (img.get("src") or img.get("data-src") or
-                   img.get("data-lazy-src") or img.get("data-original") or
-                   img.get("data-full-src") or img.get("data-url"))
+            # Các trang báo hiện đại (Vietnamnet, VnExpress, Dân Trí...) để ảnh thật trong data-original / data-src
+            # còn thẻ src chỉ chứa ảnh rác 1x1 pixel base64: data:image/gif;base64,...
+            src = (
+                img.get("data-original") or
+                img.get("data-src") or
+                img.get("data-lazy-src") or
+                img.get("data-full-src") or
+                img.get("data-url") or
+                img.get("data-srcset") or
+                img.get("srcset") or
+                img.get("src")
+            )
             if not src:
                 continue
+
+            # Nếu là srcset dạng "url1 1x, url2 2x" hoặc "url 640w", bóc lấy url đầu tiên
+            if "," in src and (" " in src or "w" in src or "x" in src):
+                src = src.split(",")[0].strip().split(" ")[0].strip()
+
+            # Bỏ qua ảnh base64 hoặc 1x1 pixel gif
+            if src.startswith("data:image"):
+                continue
+
             # Resolve relative URLs
             if src.startswith("//"):
                 src = "https:" + src
             elif src.startswith("/"):
                 src = urljoin(base_url, src)
+
             # Bỏ qua các URL không phải http
             if not src.startswith("http"):
                 continue
+
             # Bỏ qua icon/logo/quảng cáo
             src_lower = src.lower()
             if any(kw in src_lower for kw in skip_keywords):
                 continue
-            # Lọc theo kích thước nếu có attribute
+
+            # Lọc theo kích thước nếu có attribute nhỏ (icon mũi tên, icon google news)
             w_attr = img.get("width", "")
             h_attr = img.get("height", "")
             try:
-                if w_attr and int(str(w_attr).replace("px", "").strip()) < 200:
+                if w_attr and int(str(w_attr).replace("px", "").strip()) < 100:
                     continue
-                if h_attr and int(str(h_attr).replace("px", "").strip()) < 150:
+                if h_attr and int(str(h_attr).replace("px", "").strip()) < 80:
                     continue
             except Exception:
                 pass
+
             if src not in found:
                 found.append(src)
         return found
