@@ -158,12 +158,13 @@ def render_scene_clip(
 
         cmd = [
             "ffmpeg", "-y",
+            "-threads", "2",
             "-loop", "1", "-i", photo_path,       # Ảnh gốc bài báo
             "-loop", "1", "-i", overlay_path,      # Overlay PNG (RGBA, lỗ trống)
             "-i", audio_path,                      # Audio
             "-filter_complex", filter_complex,
             "-map", "[out]", "-map", "2:a",
-            "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
+            "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "192k",
             "-t", f"{duration:.4f}",
             output_path
@@ -173,11 +174,12 @@ def render_scene_clip(
         filter_str = f"scale=1080:1920,setsar=1{v_fade}"
         cmd = [
             "ffmpeg", "-y",
+            "-threads", "2",
             "-loop", "1", "-i", photo_path,
             "-i", audio_path,
             "-vf", filter_str,
             "-map", "0:v", "-map", "1:a",
-            "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
+            "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "192k",
             "-t", f"{duration:.4f}",
             output_path
