@@ -318,33 +318,31 @@ Nguồn: {source}
 Nội dung: {content[:3500]}
 """
 
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
+    import requests
 
     models_to_try = [
-        "llama-3.3-70b-versatile",
-        "llama-3.1-8b-instant",
-        "gemma2-9b-it",
-        "mixtral-8x7b-32768"
+        "qwen/qwen3.8-27b",
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b"
     ]
     for model in models_to_try:
         try:
-            req = urllib.request.Request(
+            resp = requests.post(
                 "https://api.groq.com/openai/v1/chat/completions",
                 headers={
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
-                    "User-Agent": "curl/8.7.1"
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
                 },
-                data=json.dumps({
+                json={
                     "model": model,
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": 0.2
-                }).encode("utf-8")
+                },
+                timeout=20
             )
-            with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
+            if resp.status_code == 200:
+                data = resp.json()
                 raw = data["choices"][0]["message"]["content"].strip()
                 raw = re.sub(r'^```json\s*', '', raw)
                 raw = re.sub(r'^```\s*', '', raw)
@@ -359,6 +357,8 @@ Nội dung: {content[:3500]}
                             sc["headline"] = title
                             sc["text"] = title
                     return scenes
+            else:
+                print(f"Groq model {model} returned status {resp.status_code}: {resp.text[:200]}")
         except Exception as e:
             print(f"Groq model {model} failed: {e}")
             continue
