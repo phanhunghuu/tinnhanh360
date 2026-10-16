@@ -173,6 +173,11 @@ def parse_article_to_scenes(
     else:
         target_scene_count = 9
 
+    # Lọc bỏ hẳn các câu bị điểm âm hoặc câu chứa chi tiết vụn vặt
+    valid_sents = [item for item in scored_sents if item[0] >= 0]
+    if not valid_sents:
+        valid_sents = scored_sents
+
     # Sắp xếp lấy các câu có điểm chất lượng cao nhất theo thời lượng mục tiêu
     valid_sents.sort(key=lambda x: x[0], reverse=True)
     top_candidates = valid_sents[:target_scene_count]
