@@ -73,17 +73,36 @@ def parse_article_to_scenes(
         except Exception:
             pass
 
+    ai_status = {"method": "fallback", "success": False, "message": "Dùng thuật toán bóc tách câu thông minh."}
+
     # Ưu tiên Groq AI
     if groq_key:
-        scenes = _groq_generate_scenes(title, content, source, duration_seconds, groq_key)
-        if scenes:
-            return {"title": title, "source": source, "images": article.get("images", []), "scenes": scenes}
-
-    # Nếu có API key Gemini
-    if api_key and not api_key.startswith("gsk_"):
-        scenes = _gemini_generate_scenes(title, content, source, duration_seconds, api_key)
-        if scenes:
-            return {"title": title, "source": source, "images": article.get("images", []), "scenes": scenes}
+        try:
+            scenes = _groq_generate_scenes(title, content, source, duration_seconds, groq_key)
+            if scenes:
+                return {
+                    "title": title, "source": source, "images": article.get("images", []), "scenes": scenes,
+                    "ai_status": {"method": "groq", "success": True, "message": "Đã tóm tắt bằng Groq AI siêu thông minh."}
+                }
+            else:
+                ai_status["message"] = "Không gọi được Groq AI (Model bận hoặc API Key không hợp lệ). Đã tự động chuyển sang thuật toán trích xuất câu."
+        except Exception as ge:
+            ai_status["message"] = f"Lỗi gọi Groq AI: {ge}. Đã chuyển sang thuật toán trích xuất câu."
+    elif api_key and not api_key.startswith("gsk_"):
+        # Nếu có API key Gemini
+        try:
+            scenes = _gemini_generate_scenes(title, content, source, duration_seconds, api_key)
+            if scenes:
+                return {
+                    "title": title, "source": source, "images": article.get("images", []), "scenes": scenes,
+                    "ai_status": {"method": "gemini", "success": True, "message": "Đã tóm tắt bằng Google Gemini AI."}
+                }
+            else:
+                ai_status["message"] = "Không gọi được Gemini AI. Đã chuyển sang thuật toán trích xuất câu."
+        except Exception as gme:
+            ai_status["message"] = f"Lỗi gọi Gemini AI: {gme}. Đã chuyển sang thuật toán trích xuất câu."
+    else:
+        ai_status["message"] = "Chưa nhập API Key AI (Groq/Gemini). Đang dùng thuật toán trích xuất câu theo thời gian."
 
     paragraphs = _split_into_paragraphs(content, title)
     if not paragraphs:
@@ -209,6 +228,7 @@ def parse_article_to_scenes(
         "source": source,
         "images": article.get("images", []),
         "scenes": scenes,
+        "ai_status": ai_status,
     }
 
 

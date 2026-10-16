@@ -159,6 +159,10 @@ def execute_render_job(job_id: str, req_data: dict):
                 audio_path=audio_path,
                 zalo_api_key=req_data.get("zalo_key") or "c6B974D16LbRHcSR1hRGGswtXV0LUOr6"
             )
+            if not result or result.get("duration", 0) <= 0.2:
+                raise Exception(f"Không thể tạo giọng đọc cho cảnh {idx + 1} ('{scene.get('headline', '')}'). Vui lòng kiểm tra lại kết nối mạng hoặc đổi giọng đọc khác.")
+            if result.get("is_silent"):
+                raise Exception(f"Không kết nối được dịch vụ giọng đọc AI cho cảnh {idx + 1}. Vui lòng kiểm tra lại kết nối Internet hoặc tài khoản giọng đọc.")
             tts_results.append(result)
 
         # 2. Render Scene Clips & Pipeline

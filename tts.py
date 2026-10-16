@@ -179,8 +179,16 @@ def generate_tts(
     except Exception:
         duration = 2.0
 
+    is_silent = False
+    try:
+        if os.path.exists(audio_path) and os.path.getsize(audio_path) < 1000:
+            is_silent = True
+    except Exception:
+        pass
+
     return {
         "audio_path": audio_path,
         "duration": duration,
         "sentences": boundaries,
+        "is_silent": is_silent,
     }

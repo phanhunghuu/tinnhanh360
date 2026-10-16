@@ -243,6 +243,7 @@
 
       <!-- EDITOR SCENES -->
       <div id="editorSection">
+        <div id="aiNoticeBox" style="margin-bottom:14px;padding:10px 14px;border-radius:10px;font-size:12px;line-height:1.5;display:none;"></div>
         <div class="editor-header">✏️ Bước 2: Chỉnh sửa phân cảnh</div>
         <p style="font-size:12px; color:var(--muted); margin-bottom:12px;">Bấm vào tiêu đề từng scene để mở rộng và chỉnh sửa lời thoại, hiệu ứng chuyển động.</p>
         <div class="scenes-list" id="scenesList"></div>
@@ -341,6 +342,24 @@
       if (!res.ok) throw new Error(json.detail);
       currentData = json.data;
       buildScenesUI(currentData);
+      
+      // Hiển thị thông báo trạng thái AI tóm tắt
+      const noticeBox = document.getElementById('aiNoticeBox');
+      if (currentData.ai_status && noticeBox) {
+        noticeBox.style.display = 'block';
+        if (currentData.ai_status.success) {
+          noticeBox.style.background = 'rgba(34,197,94,0.12)';
+          noticeBox.style.border = '1px solid rgba(34,197,94,0.3)';
+          noticeBox.style.color = '#86efac';
+          noticeBox.innerHTML = '🤖 <strong>AI Tóm Tắt Hoạt Động Tốt:</strong> ' + currentData.ai_status.message;
+        } else {
+          noticeBox.style.background = 'rgba(234,179,8,0.12)';
+          noticeBox.style.border = '1px solid rgba(234,179,8,0.3)';
+          noticeBox.style.color = '#fde047';
+          noticeBox.innerHTML = '⚠️ <strong>Cảnh Báo AI Tóm Tắt:</strong> ' + currentData.ai_status.message + '<br><span style="font-size:11px;color:#cbd5e1;">(Hệ thống đã tự động trích xuất các câu cốt lõi theo thời lượng để không làm gián đoạn kịch bản).</span>';
+        }
+      }
+
       document.getElementById('editorSection').style.display = 'block';
     } catch (e) {
       alert('Lỗi: ' + e.message);
