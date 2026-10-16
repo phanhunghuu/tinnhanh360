@@ -660,6 +660,7 @@
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
+          title: currentData.title || (currentData.scenes && currentData.scenes[0] ? currentData.scenes[0].headline : ''),
           source: currentData.source,
           images: currentData.images,
           scenes: currentData.scenes,
@@ -716,6 +717,9 @@
             videoEl.load(); videoEl.play();
 
             dlBtn.href = sData.video_url;
+            if (sData.filename) {
+              dlBtn.setAttribute('download', sData.filename);
+            }
             dlBtn.style.display = 'block';
 
             btn.disabled = false;

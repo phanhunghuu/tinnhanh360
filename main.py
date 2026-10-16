@@ -2,7 +2,9 @@
 Main FastAPI server
 """
 import os
+import re
 import uuid
+import unicodedata
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -37,7 +39,23 @@ class ParseRequest(BaseModel):
     gemini_key: Optional[str] = None
 
 
+import unicodedata
+
+def slugify_title(text: str) -> str:
+    """Chuyển tiêu đề tiếng Việt có dấu thành chuỗi không dấu dạng slug: vd cong-an-phu-tho-..."""
+    if not text:
+        return "news"
+    text = unicodedata.normalize('NFKD', text)
+    text = ''.join([c for c in text if not unicodedata.combining(c)])
+    text = text.replace('đ', 'd').replace('Đ', 'D')
+    text = re.sub(r'[^a-zA-Z0-9\s-]', '', text).strip().lower()
+    text = re.sub(r'[\s_-]+', '-', text)
+    slug = text[:120].strip('-')
+    return slug or "news"
+
+
 class RenderRequest(BaseModel):
+    title: Optional[str] = ""
     source: str
     images: List[str] = []
     scenes: List[dict]
@@ -175,7 +193,14 @@ def execute_render_job(job_id: str, req_data: dict):
             cur_pct = 40 + int(factor * 55)
             update_job_progress(job_id, step_key, step_msg, cur_pct)
 
-        final_name = f"news_{job_id}.mp4"
+        # Đặt tên file bằng tiêu đề bài báo không dấu, ví dụ: cong-an-phu-tho-khoi-to-...mp4
+        article_title = req_data.get("title") or ""
+        if not article_title and scenes:
+            # Lấy tiêu đề từ scene đầu tiên nếu không có title
+            article_title = scenes[0].get("headline") or ""
+
+        title_slug = slugify_title(article_title)
+        final_name = f"{title_slug}.mp4"
         final_path = os.path.join(job_dir, final_name)
         use_bgm = req_data.get("use_bgm", True)
         bgm_to_use = DEFAULT_BGM_PATH if (use_bgm and os.path.exists(DEFAULT_BGM_PATH)) else None
@@ -195,6 +220,7 @@ def execute_render_job(job_id: str, req_data: dict):
         update_job_progress(job_id, "complete", "Đã hoàn thành xuất video 9:16 chất lượng cao!", 100)
         jobs_status[job_id]["status"] = "completed"
         jobs_status[job_id]["video_url"] = f"/outputs/{job_id}/{final_name}"
+        jobs_status[job_id]["filename"] = final_name
 
     except Exception as e:
         import traceback
@@ -218,6 +244,7 @@ async def render_video(req: RenderRequest):
     }
 
     req_data = {
+        "title": req.title,
         "source": req.source,
         "images": req.images,
         "scenes": req.scenes,
