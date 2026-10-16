@@ -143,20 +143,26 @@ def parse_article_to_scenes(
 
         scored_sents.append((score, idx, sent))
 
-    # Lọc bỏ hẳn các câu bị điểm âm hoặc câu chứa chi tiết vụn vặt
-    valid_sents = [item for item in scored_sents if item[0] >= 0]
-    if not valid_sents:
-        valid_sents = scored_sents
+    # Tính toán số lượng cảnh chi tiết dựa trên thời lượng yêu cầu:
+    # 30s: 3-4 cảnh (~60-70 từ)
+    # 60s: 6-8 cảnh (~130-160 từ)
+    # 90s: 9-12 cảnh (~200-240 từ)
+    if duration_seconds <= 35:
+        target_scene_count = 3
+    elif duration_seconds <= 70:
+        target_scene_count = 6
+    else:
+        target_scene_count = 9
 
-    # Sắp xếp lấy 3 câu có điểm chất lượng cao nhất
+    # Sắp xếp lấy các câu có điểm chất lượng cao nhất theo thời lượng mục tiêu
     valid_sents.sort(key=lambda x: x[0], reverse=True)
-    top_candidates = valid_sents[:3]
-    # Sắp xếp lại theo trình tự thời gian ban đầu của bài báo
+    top_candidates = valid_sents[:target_scene_count]
+    # Sắp xếp lại theo trình tự thời gian ban đầu của bài báo để bài có đầu có đuôi, dễ hiểu
     top_candidates.sort(key=lambda x: x[1])
 
     selected_sents = [item[2] for item in top_candidates]
     if not selected_sents:
-        selected_sents = all_sentences[:2]
+        selected_sents = all_sentences[:target_scene_count]
 
     headlines_cycle = [
         "DIỄN BIẾN VỤ VIỆC",
@@ -211,15 +217,25 @@ def _groq_generate_scenes(title: str, content: str, source: str, duration: int, 
     import urllib.request
     import ssl
 
-    prompt = f"""Bạn là biên tập viên tin tức video thời sự TikTok chuyên nghiệp.
-Hãy phân tích bài báo sau và tạo kịch bản video TikTok 9:16 gồm 4-6 scenes thật mạch lạc, gãy gọn theo đúng cấu trúc tiêu chuẩn nghiệp vụ báo chí.
+    # Điều chỉnh số lượng phân cảnh theo thời lượng
+    if duration <= 35:
+        target_scene_text = "4-5 scenes (tổng thời lượng đọc khoảng 30 giây, cô đọng nhất)"
+    elif duration <= 70:
+        target_scene_text = "7-9 scenes (tổng thời lượng đọc khoảng 60 giây, đầy đủ mở đầu, diễn biến, nguyên nhân, số liệu và kết cục)"
+    else:
+        target_scene_text = "10-13 scenes (tổng thời lượng đọc khoảng 90 giây, phân tích chi tiết, toàn diện mọi khía cạnh của bài báo)"
 
-QUY TẮC BẮT BUỘC VỀ HEADLINE (CHỈ ĐƯỢC DÙNG CÁC HEADLINE SAU ĐÂY):
-1. Scene 1: type="title_hero", headline="{title}", text="{title}" (Giữ nguyên 100% tiêu đề gốc bài báo, không cắt bớt).
-2. Scene 2: type="news_detail", headline="BỐI CẢNH VỤ VIỆC", text=1 câu nêu rõ thời gian, địa điểm, hoàn cảnh khởi nguồn sự việc (ai, ở đâu, khi nào).
-3. Scene 3 & 4 (có thể có 2-3 frame): type="news_detail", headline="DIỄN BIẾN VỤ VIỆC", text=mỗi frame là 1 câu nêu diễn biến tiếp theo của sự việc.
-4. Scene áp chót: type="news_detail", headline="KẾT QUẢ" (hoặc "KẾT LUẬN"), text=1 câu nêu kết quả xử lý, hậu quả, hoặc thông báo chính thức cuối cùng.
-5. Scene cuối: type="follow", headline="THEO DÕI ĐỂ XEM THÊM", text="Bấm theo dõi kênh để cập nhật liên tục các tin tức nóng nhất."
+    prompt = f"""Bạn là biên tập viên tin tức video thời sự chuyên nghiệp.
+Hãy phân tích bài báo sau và tạo kịch bản video TikTok 9:16 gồm {target_scene_text} thật mạch lạc, có đầu có đuôi, người nghe hiểu trọn vẹn toàn bộ sự việc.
+
+QUY TẮC BẮT BUỘC VỀ PHÂN CẢNH VÀ HEADLINE:
+1. Scene 1: type="title_hero", headline="{title}", text="{title}" (Đọc đúng tiêu đề gốc bài báo).
+2. Các Scene tiếp theo (news_detail): Lần lượt đi qua:
+   - "BỐI CẢNH VỤ VIỆC": Nêu thời gian, địa điểm, các bên liên quan, hoàn cảnh khởi nguồn.
+   - "DIỄN BIẾN VỤ VIỆC": Có thể chia làm 2-4 scenes kế tiếp nhau thuật lại chi tiết sự việc theo trình tự thời gian.
+   - "CHI TIẾT ĐIỀU TRA" hoặc "SỐ LIỆU & HẬU QUẢ": Các tình tiết quan trọng, thiệt hại, hoặc bằng chứng.
+   - "KẾT QUẢ" hoặc "PHÁN QUYẾT": Phán quyết của cơ quan chức năng, tòa án hoặc thông báo cuối cùng.
+3. Scene cuối cùng: type="follow", headline="THEO DÕI ĐỂ XEM THÊM", text="Bấm theo dõi kênh để cập nhật liên tục các tin tức nóng nhất."
 
 TUYỆT ĐỐI TUÂN THỦ:
 - CHỈ sử dụng đúng 3 loại tiêu đề trên cho các frame chi tiết: "BỐI CẢNH VỤ VIỆC", "DIỄN BIẾN VỤ VIỆC" và "KẾT QUẢ" (hoặc "KẾT LUẬN"). Không tự ý bịa thêm tiêu đề lạ khác.
@@ -281,7 +297,12 @@ Nội dung: {content[:3500]}
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
 
-    models_to_try = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b"]
+    models_to_try = [
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+        "gemma2-9b-it",
+        "mixtral-8x7b-32768"
+    ]
     for model in models_to_try:
         try:
             req = urllib.request.Request(
