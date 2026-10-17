@@ -73,6 +73,34 @@ def get_youtube_credentials(open_browser: bool = True) -> Credentials:
     return creds
 
 
+import subprocess
+
+
+def extract_first_frame(video_path: str, time_offset: str = "00:00:00.800") -> Optional[str]:
+    """
+    Trích xuất khung ảnh đầu tiên (hoặc tại giây 0.8s) từ video làm thumbnail đẹp mắt.
+    """
+    try:
+        base_dir = os.path.dirname(video_path)
+        thumb_path = os.path.join(base_dir, "first_frame_thumbnail.jpg")
+        cmd = [
+            "ffmpeg", "-y",
+            "-ss", time_offset,
+            "-i", video_path,
+            "-vframes", "1",
+            "-q:v", "2",
+            thumb_path
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        if result.returncode == 0 and os.path.exists(thumb_path) and os.path.getsize(thumb_path) > 1000:
+            return thumb_path
+        print(f"[youtube_uploader] Lỗi trích xuất frame bằng ffmpeg: {result.stderr[-500:]}")
+        return None
+    except Exception as e:
+        print(f"[youtube_uploader] Lỗi khi trích frame đầu tiên: {e}")
+        return None
+
+
 def upload_to_youtube(
     video_path: str,
     title: str,
@@ -81,7 +109,7 @@ def upload_to_youtube(
     privacy_status: str = "public"
 ) -> Dict:
     """
-    Tải video lên YouTube Shorts.
+    Tải video lên YouTube Shorts và tự động đặt khung ảnh đầu tiên làm thumbnail (ảnh bìa).
     - video_path: Đường dẫn tuyệt đối đến file MP4
     - title: Tiêu đề video (tự động gắn thêm #Shorts nếu chưa có)
     - description: Mô tả chi tiết
@@ -143,10 +171,29 @@ def upload_to_youtube(
     video_id = response.get("id")
     video_url = f"https://www.youtube.com/shorts/{video_id}"
 
+    # TỰ ĐỘNG ĐẶT KHUNG HÌNH ĐẦU TIÊN LÀM THUMBNAIL
+    thumbnail_status = "none"
+    thumb_path = extract_first_frame(video_path, time_offset="00:00:00.800")
+    if thumb_path and os.path.exists(thumb_path):
+        try:
+            thumb_media = MediaFileUpload(thumb_path, mimetype="image/jpeg")
+            thumb_request = youtube.thumbnails().set(
+                videoId=video_id,
+                media_body=thumb_media
+            )
+            thumb_response = thumb_request.execute()
+            print(f"[youtube_uploader] Đã gán thumbnail khung hình đầu tiên thành công cho video {video_id}: {thumb_response}")
+            thumbnail_status = "success"
+        except Exception as te:
+            print(f"[youtube_uploader] Không thể tự động set thumbnail qua API (Kênh có thể chưa xác minh SĐT để bật Custom Thumbnail): {te}")
+            thumbnail_status = f"warning: {te}"
+
     return {
         "success": True,
         "video_id": video_id,
         "video_url": video_url,
         "title": clean_title,
-        "privacy": privacy_status
+        "privacy": privacy_status,
+        "thumbnail_status": thumbnail_status
     }
+

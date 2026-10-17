@@ -230,3 +230,50 @@ def extract_article_content(url_or_text: str):
         "url": url,
         "images": images
     }
+
+
+def extract_multiple_articles(urls: list) -> dict:
+    """
+    Cào nhiều bài báo từ danh sách URL (2-3 bài), gộp nội dung và ảnh lại.
+    Trả về dict giống extract_article_content nhưng nội dung là tổng hợp từ tất cả bài.
+    """
+    all_contents = []
+    all_images = []
+    all_titles = []
+    all_sources = []
+
+    for url in urls:
+        url = url.strip()
+        if not url:
+            continue
+        try:
+            article = extract_article_content(url)
+            if article.get("title"):
+                all_titles.append(article["title"])
+            if article.get("content") and len(article["content"].strip()) > 20:
+                all_contents.append(f"--- BÀI {len(all_contents)+1}: {article.get('title', '')} ---\n{article['content']}")
+            if article.get("source"):
+                all_sources.append(article["source"])
+            for img in article.get("images", []):
+                if img not in all_images:
+                    all_images.append(img)
+        except Exception as e:
+            print(f"[scraper] Lỗi cào bài {url}: {e}")
+            continue
+
+    if not all_contents:
+        raise Exception("Không cào được nội dung từ bất kỳ link nào trong danh sách.")
+
+    # Gộp tiêu đề: Lấy tiêu đề bài đầu tiên làm tiêu đề chính
+    merged_title = all_titles[0] if all_titles else "Tổng hợp tin tức"
+    merged_source = " + ".join(list(dict.fromkeys(all_sources))) if all_sources else "Tổng hợp"
+    merged_content = "\n\n".join(all_contents)
+
+    return {
+        "title": merged_title,
+        "content": merged_content,
+        "source": merged_source,
+        "url": urls[0] if urls else None,
+        "images": all_images,
+        "article_count": len(all_contents),
+    }

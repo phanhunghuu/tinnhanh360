@@ -49,6 +49,7 @@ def parse_article_to_scenes(
     article: dict,
     duration_seconds: int = 60,
     api_key: Optional[str] = None,
+    video_style: str = "tin_tuc",
 ) -> dict:
     """
     Phân tích bài báo thành list scenes:
@@ -78,7 +79,7 @@ def parse_article_to_scenes(
     # Ưu tiên Groq AI
     if groq_key:
         try:
-            scenes = _groq_generate_scenes(title, content, source, duration_seconds, groq_key)
+            scenes = _groq_generate_scenes(title, content, source, duration_seconds, groq_key, video_style)
             if scenes:
                 return {
                     "title": title, "source": source, "images": article.get("images", []), "scenes": scenes,
@@ -228,6 +229,19 @@ def parse_article_to_scenes(
     for i, sc in enumerate(scenes, 1):
         sc["id"] = i
 
+    # Tuỳ chỉnh headlines theo phong cách video
+    style_headlines = {
+        "tin_tuc": ["DIỄN BIẾN VỤ VIỆC", "KẾT QUẢ ĐIỀU TRA", "PHÁN QUYẾT CỦA TÒA ÁN", "HẬU QUẢ VỤ VIỆC"],
+        "vu_an": ["BỐI CẢNH VỤ ÁN", "DIỄN BIẾN SỰ VIỆC", "MANH MỐI ĐIỀU TRA", "KẾT CỤC VỤ ÁN"],
+        "khoa_hoc": ["KHÁM PHÁ THÚ VỊ", "SỰ THẬT BẤT NGỜ", "GIẢI MÃ BÍ ẨN", "ĐIỀU ÍT AI BIẾT"],
+        "tong_hop": ["THÔNG TIN CHÍNH", "CHI TIẾT QUAN TRỌNG", "GÓC NHÌN TỔNG HỢP", "KẾT LUẬN"],
+    }
+    hl_cycle = style_headlines.get(video_style, style_headlines["tin_tuc"])
+    for sc in scenes:
+        if sc.get("type") == "news_detail" and sc.get("headline") in ["DIỄN BIẾN VỤ VIỆC", "KẾT QUẢ ĐIỀU TRA", "PHÁN QUYẾT CỦA TÒA ÁN", "HẬU QUẢ VỤ VIỆC"]:
+            idx = scenes.index(sc) % len(hl_cycle)
+            sc["headline"] = hl_cycle[idx]
+
     return {
         "title": title,
         "source": source,
@@ -237,8 +251,8 @@ def parse_article_to_scenes(
     }
 
 
-def _groq_generate_scenes(title: str, content: str, source: str, duration: int, api_key: str) -> list:
-    """Dùng Groq AI (qwen/qwen3.8-27b hoặc openai/gpt-oss-120b) tạo kịch bản video thời sự kịch tính và logic."""
+def _groq_generate_scenes(title: str, content: str, source: str, duration: int, api_key: str, video_style: str = "tin_tuc") -> list:
+    """Dùng Groq AI tạo kịch bản video theo phong cách (tin tức, vụ án, khoa học, tổng hợp)."""
     import urllib.request
     import ssl
 
@@ -248,9 +262,120 @@ def _groq_generate_scenes(title: str, content: str, source: str, duration: int, 
     elif duration <= 70:
         target_scene_text = "7-9 scenes (tổng thời lượng đọc khoảng 60 giây, đầy đủ mở đầu, diễn biến, nguyên nhân, số liệu và kết cục)"
     else:
-        target_scene_text = "10-13 scenes (tổng thời lượng đọc khoảng 90 giây, phân tích chi tiết, toàn diện mọi khía cạnh của bài báo)"
+        target_scene_text = "10-13 scenes (tổng thời lượng đọc khoảng 90 giây, phân tích chi tiết, toàn diện mọi khía cạnh)"
 
-    prompt = f"""Bạn là biên tập viên tin tức video thời sự chuyên nghiệp.
+    # ═══════════════ PROMPT THEO PHONG CÁCH VIDEO ═══════════════
+    if video_style == "vu_an":
+        prompt = f"""Bạn là biên tập viên chuyên kể chuyện vụ án hình sự, phong cách kịch tính hấp dẫn như chương trình "Hành trình phá án" hoặc "Lật mặt tội phạm".
+Hãy phân tích bài báo sau và tạo kịch bản video TikTok 9:16 kể chuyện vụ án gồm {target_scene_text}, giọng kể lôi cuốn, bí ẩn, có cao trào.
+
+QUY TẮC BẮT BUỘC VỀ CẤU TRÚC KỂ CHUYỆN VỤ ÁN:
+1. Scene 1: type="title_hero", headline="{title}", text="{title}" (Đọc đúng tiêu đề gốc).
+2. Các Scene tiếp theo (news_detail), PHẢI theo thứ tự kể chuyện:
+   - "BỐI CẢNH VỤ ÁN": Mở đầu đặt bối cảnh, thời gian, địa điểm, nhân vật. Câu mở đầu hấp dẫn cuốn hút.
+   - "DIỄN BIẾN SỰ VIỆC": Có thể 2-4 scenes, kể lại diễn biến theo trình tự thời gian, tăng dần kịch tính.
+   - "MANH MỐI ĐIỀU TRA": Quá trình điều tra, manh mối phát hiện, bằng chứng.
+   - "KẾT CỤC VỤ ÁN": Kẻ phạm tội bị bắt/xử lý thế nào, phán quyết của tòa, bài học rút ra.
+3. Scene cuối: type="follow", headline="THEO DÕI ĐỂ XEM THÊM", text="Bấm theo dõi kênh để cập nhật liên tục các vụ án chấn động nhất."
+
+PHONG CÁCH VIẾT:
+- Giọng kể bí ẩn, kịch tính, tạo sự tò mò (ví dụ: "Không ai ngờ rằng...", "Sự thật đằng sau...")
+- Mỗi câu ngắn gọn, dứt khoát, tạo nhịp điệu kể chuyện hấp dẫn
+- Kết thúc mỗi scene bằng câu tạo sự tò mò để người xem muốn xem tiếp
+
+CHỈ sử dụng 4 loại headline: "BỐI CẢNH VỤ ÁN", "DIỄN BIẾN SỰ VIỆC", "MANH MỐI ĐIỀU TRA", "KẾT CỤC VỤ ÁN".
+
+BẮT BUỘC trả về đúng định dạng JSON Array (KHÔNG dùng markdown ```json, CHỈ xuất JSON thuần):
+[
+  {{"id": 1, "type": "title_hero", "headline": "{title}", "text": "{title}", "motion": "zoom_in"}},
+  {{"id": 2, "type": "news_detail", "headline": "BỐI CẢNH VỤ ÁN", "text": "Câu mở đầu bối cảnh kịch tính.", "motion": "pan"}},
+  {{"id": 3, "type": "news_detail", "headline": "DIỄN BIẾN SỰ VIỆC", "text": "Câu kể diễn biến.", "motion": "zoom_out"}},
+  {{"id": 4, "type": "news_detail", "headline": "MANH MỐI ĐIỀU TRA", "text": "Câu về điều tra.", "motion": "pan"}},
+  {{"id": 5, "type": "news_detail", "headline": "KẾT CỤC VỤ ÁN", "text": "Câu kết cục.", "motion": "zoom_out"}},
+  {{"id": 6, "type": "follow", "headline": "THEO DÕI ĐỂ XEM THÊM", "text": "Bấm theo dõi kênh để cập nhật liên tục các vụ án chấn động nhất.", "motion": "static"}}
+]
+
+BÀI BÁO:
+Tiêu đề: {title}
+Nguồn: {source}
+Nội dung: {content[:3500]}
+"""
+
+    elif video_style == "khoa_hoc":
+        prompt = f"""Bạn là biên tập viên video khoa học/thiên nhiên chuyên nghiệp, phong cách như "National Geographic" hoặc "Khám phá thế giới".
+Hãy phân tích bài viết sau và tạo kịch bản video TikTok 9:16 dạng "Top khám phá" hoặc "Sự thật thú vị" gồm {target_scene_text}.
+
+QUY TẮC BẮT BUỘC VỀ CẤU TRÚC VIDEO KHOA HỌC/THIÊN NHIÊN:
+1. Scene 1: type="title_hero", headline="{title}", text="{title}" (Đọc đúng tiêu đề gốc).
+2. Các Scene tiếp theo (news_detail), PHẢI theo cấu trúc:
+   - "KHÁM PHÁ THÚ VỊ": Giới thiệu chủ đề, tạo sự tò mò.
+   - "SỰ THẬT BẤT NGỜ": Các sự thật, dữ kiện thú vị, con số ấn tượng. Có thể 2-4 scenes.
+   - "GIẢI MÃ BÍ ẨN": Giải thích khoa học, nguyên nhân, cơ chế hoạt động.
+   - "ĐIỀU ÍT AI BIẾT": Chi tiết bất ngờ, góc nhìn mới lạ.
+3. Scene cuối: type="follow", headline="THEO DÕI ĐỂ XEM THÊM", text="Bấm theo dõi kênh để khám phá thêm nhiều điều thú vị mỗi ngày."
+
+PHONG CÁCH VIẾT:
+- Giọng kể tò mò, phấn khích, truyền cảm hứng khám phá
+- Dùng số liệu cụ thể, so sánh trực quan (ví dụ: "gấp 10 lần kích thước Trái Đất")
+- Mỗi scene như một "fact" hoặc "khám phá" riêng biệt
+- Nếu bài viết dạng Top/Danh sách, đánh số từng mục rõ ràng
+
+CHỈ sử dụng 4 loại headline: "KHÁM PHÁ THÚ VỊ", "SỰ THẬT BẤT NGỜ", "GIẢI MÃ BÍ ẨN", "ĐIỀU ÍT AI BIẾT".
+
+BẮT BUỘC trả về đúng định dạng JSON Array (KHÔNG dùng markdown ```json, CHỈ xuất JSON thuần):
+[
+  {{"id": 1, "type": "title_hero", "headline": "{title}", "text": "{title}", "motion": "zoom_in"}},
+  {{"id": 2, "type": "news_detail", "headline": "KHÁM PHÁ THÚ VỊ", "text": "Câu giới thiệu chủ đề.", "motion": "pan"}},
+  {{"id": 3, "type": "news_detail", "headline": "SỰ THẬT BẤT NGỜ", "text": "Một sự thật thú vị.", "motion": "zoom_out"}},
+  {{"id": 4, "type": "news_detail", "headline": "GIẢI MÃ BÍ ẨN", "text": "Giải thích khoa học.", "motion": "pan"}},
+  {{"id": 5, "type": "news_detail", "headline": "ĐIỀU ÍT AI BIẾT", "text": "Chi tiết bất ngờ.", "motion": "zoom_out"}},
+  {{"id": 6, "type": "follow", "headline": "THEO DÕI ĐỂ XEM THÊM", "text": "Bấm theo dõi kênh để khám phá thêm nhiều điều thú vị mỗi ngày.", "motion": "static"}}
+]
+
+BÀI VIẾT:
+Tiêu đề: {title}
+Nguồn: {source}
+Nội dung: {content[:3500]}
+"""
+
+    elif video_style == "tong_hop":
+        prompt = f"""Bạn là biên tập viên tổng hợp tin tức chuyên nghiệp. Nhiệm vụ: tổng hợp dữ liệu từ NHIỀU bài báo khác nhau thành MỘT kịch bản video TikTok 9:16 mạch lạc, hoàn chỉnh.
+Tạo kịch bản gồm {target_scene_text}.
+
+QUY TẮC BẮT BUỘC VỀ CẤU TRÚC VIDEO TỔNG HỢP:
+1. Scene 1: type="title_hero", headline="{title}", text="{title}" (Tiêu đề tổng hợp ngắn gọn, hấp dẫn).
+2. Các Scene tiếp theo (news_detail), PHẢI theo cấu trúc:
+   - "THÔNG TIN CHÍNH": Tóm tắt ý chính xuyên suốt tất cả các bài.
+   - "CHI TIẾT QUAN TRỌNG": Trích xuất các chi tiết quan trọng, số liệu nổi bật từ các bài. Có thể 2-4 scenes.
+   - "GÓC NHÌN TỔNG HỢP": So sánh, đối chiếu thông tin từ nhiều nguồn, phân tích.
+   - "KẾT LUẬN": Tổng kết, nhận định tổng quan.
+3. Scene cuối: type="follow", headline="THEO DÕI ĐỂ XEM THÊM", text="Bấm theo dõi kênh để cập nhật liên tục các tin tức tổng hợp mới nhất."
+
+PHONG CÁCH VIẾT:
+- Tổng hợp mạch lạc, KHÔNG liệt kê từng bài riêng lẻ mà phải XÂU CHUỖI thành một câu chuyện liền mạch
+- Ưu tiên thông tin quan trọng nhất, loại bỏ trùng lặp giữa các bài
+- Giọng văn khách quan, chuyên nghiệp
+
+CHỈ sử dụng 4 loại headline: "THÔNG TIN CHÍNH", "CHI TIẾT QUAN TRỌNG", "GÓC NHÌN TỔNG HỢP", "KẾT LUẬN".
+
+BẮT BUỘC trả về đúng định dạng JSON Array (KHÔNG dùng markdown ```json, CHỈ xuất JSON thuần):
+[
+  {{"id": 1, "type": "title_hero", "headline": "{title}", "text": "{title}", "motion": "zoom_in"}},
+  {{"id": 2, "type": "news_detail", "headline": "THÔNG TIN CHÍNH", "text": "Câu tóm tắt ý chính.", "motion": "pan"}},
+  {{"id": 3, "type": "news_detail", "headline": "CHI TIẾT QUAN TRỌNG", "text": "Chi tiết nổi bật.", "motion": "zoom_out"}},
+  {{"id": 4, "type": "news_detail", "headline": "GÓC NHÌN TỔNG HỢP", "text": "Phân tích tổng hợp.", "motion": "pan"}},
+  {{"id": 5, "type": "news_detail", "headline": "KẾT LUẬN", "text": "Tổng kết.", "motion": "zoom_out"}},
+  {{"id": 6, "type": "follow", "headline": "THEO DÕI ĐỂ XEM THÊM", "text": "Bấm theo dõi kênh để cập nhật liên tục các tin tức tổng hợp mới nhất.", "motion": "static"}}
+]
+
+NỘI DUNG TỔNG HỢP TỪ NHIỀU BÀI:
+Tiêu đề chính: {title}
+Nguồn: {source}
+Nội dung gộp: {content[:5000]}
+"""
+
+    else:  # tin_tuc (mặc định)
+        prompt = f"""Bạn là biên tập viên tin tức video thời sự chuyên nghiệp.
 Hãy phân tích bài báo sau và tạo kịch bản video TikTok 9:16 gồm {target_scene_text} thật mạch lạc, có đầu có đuôi, người nghe hiểu trọn vẹn toàn bộ sự việc.
 
 QUY TẮC BẮT BUỘC VỀ PHÂN CẢNH VÀ HEADLINE:

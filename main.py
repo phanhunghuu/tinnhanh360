@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional, List
 
-from scraper import extract_article_content
+from scraper import extract_article_content, extract_multiple_articles
 from script_generator import parse_article_to_scenes
 from tts import generate_tts
 from video_pipeline import render_full_video
@@ -34,9 +34,11 @@ app.mount("/outputs", StaticFiles(directory=OUTPUT_DIR), name="outputs")
 
 
 class ParseRequest(BaseModel):
-    url_or_text: str
+    url_or_text: str = ""
+    urls: List[str] = []  # Danh sách nhiều URL cho chế độ tổng hợp
     duration: int = 60
     gemini_key: Optional[str] = None
+    video_style: str = "tin_tuc"  # tin_tuc | vu_an | khoa_hoc | tong_hop
 
 
 import unicodedata
@@ -165,13 +167,32 @@ def upload_youtube_endpoint(req: YouTubeUploadRequest):
 @app.post("/api/parse-article")
 async def parse_article(req: ParseRequest):
     try:
-        article = extract_article_content(req.url_or_text)
+        video_style = req.video_style or "tin_tuc"
+
+        # Chế độ tổng hợp nhiều bài (2-3 URL)
+        if video_style == "tong_hop" and req.urls and len(req.urls) > 0:
+            valid_urls = [u.strip() for u in req.urls if u.strip().startswith("http")]
+            if len(valid_urls) == 0:
+                raise Exception("Vui lòng nhập ít nhất 1 link bài báo hợp lệ (bắt đầu bằng http).")
+            if len(valid_urls) == 1:
+                article = extract_article_content(valid_urls[0])
+            else:
+                article = extract_multiple_articles(valid_urls)
+        else:
+            # Chế độ 1 bài đơn (tin tức, vụ án, khoa học)
+            input_text = req.url_or_text.strip()
+            if not input_text:
+                raise Exception("Vui lòng nhập link bài báo hoặc nội dung văn bản.")
+            article = extract_article_content(input_text)
+
         if not article["content"] or len(article["content"].strip()) < 20 or article["content"].startswith("Không thể đọc nội dung"):
             raise Exception(f"Không cào được chữ từ link (nội dung rỗng hoặc bị trang báo chặn/yêu cầu captcha). Hãy thử dán trực tiếp đoạn văn bản bài báo vào ô.")
+
         parsed = parse_article_to_scenes(
             article,
             duration_seconds=req.duration,
             api_key=req.gemini_key or None,
+            video_style=video_style,
         )
         return {"success": True, "data": parsed}
     except Exception as e:
