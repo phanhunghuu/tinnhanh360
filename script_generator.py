@@ -298,44 +298,45 @@ BẮT BUỘC trả về đúng định dạng JSON Array (KHÔNG dùng markdown 
 BÀI BÁO:
 Tiêu đề: {title}
 Nguồn: {source}
-Nội dung: {content[:3500]}
+Nội dung: {content[:8000]}
 """
 
     elif video_style == "khoa_hoc":
         prompt = f"""Bạn là biên tập viên video khoa học/thiên nhiên chuyên nghiệp, phong cách như "National Geographic" hoặc "Khám phá thế giới".
-Hãy phân tích bài viết sau và tạo kịch bản video TikTok 9:16 dạng "Top khám phá" hoặc "Sự thật thú vị" gồm {target_scene_text}.
+Hãy phân tích toàn bộ bài viết sau và tạo kịch bản video TikTok 9:16 dạng "Top khám phá" hoặc "Sự thật thú vị" gồm {target_scene_text}.
 
-QUY TẮC BẮT BUỘC VỀ CẤU TRÚC VIDEO KHOA HỌC/THIÊN NHIÊN:
-1. Scene 1: type="title_hero", headline="{title}", text="{title}" (Đọc đúng tiêu đề gốc).
-2. Các Scene tiếp theo (news_detail), PHẢI theo cấu trúc:
-   - "KHÁM PHÁ THÚ VỊ": Giới thiệu chủ đề, tạo sự tò mò.
-   - "SỰ THẬT BẤT NGỜ": Các sự thật, dữ kiện thú vị, con số ấn tượng. Có thể 2-4 scenes.
-   - "GIẢI MÃ BÍ ẨN": Giải thích khoa học, nguyên nhân, cơ chế hoạt động.
-   - "ĐIỀU ÍT AI BIẾT": Chi tiết bất ngờ, góc nhìn mới lạ.
+QUY TẮC SỐNG CÒN VỀ TÍNH ĐẦY ĐỦ CỦA NỘI DUNG (ĐẶC BIỆT LÀ DẠNG BÀI TOP / DANH SÁCH):
+- NẾU BÀI VIẾT LÀ DẠNG TOP (ví dụ: Top 5, Top 7, Top 10, danh sách các địa điểm/sinh vật/hiện tượng):
+  + BẮT BUỘC PHẢI LIỆT KÊ VÀ NÊU ĐỦ 100% CÁC MỤC (Ví dụ bài có Top 5 thì phải đủ cả 5 mục: Số 1, Số 2, Số 3, Số 4, Số 5. TUYỆT ĐỐI KHÔNG ĐƯỢC BỎ SÓT BẤT KỲ MỤC NÀO!).
+  + Mỗi mục của danh sách là ít nhất 1 Scene riêng biệt (hoặc 2 scenes nếu thông tin dài).
+  + Đánh số rõ ràng ở đầu câu (ví dụ: "Số 1:...", "Số 2:...", "Số 3:...", "Số 4:...", "Số 5:...").
+- NẾU BÀI VIẾT KHÔNG PHẢI DẠNG TOP: Nêu đầy đủ các ý chính, sự thật bất ngờ từ đầu đến cuối bài, không cắt cụt giữa chừng.
+
+CẤU TRÚC PHÂN CẢNH:
+1. Scene 1: type="title_hero", headline="{title}", text="{title}" (Đọc đúng tiêu đề gốc bài báo).
+2. Các Scene tiếp theo (news_detail):
+   - Đặt headline phù hợp trong các nhóm: "KHÁM PHÁ THÚ VỊ", "SỰ THẬT BẤT NGỜ", "GIẢI MÃ BÍ ẨN", "ĐIỀU ÍT AI BIẾT" (hoặc nếu bài là Top 5 thì có thể để "TOP 1", "TOP 2", "TOP 3", "TOP 4", "TOP 5").
+   - Lời đọc (text): Ngắn gọn, súc tích (1-2 câu), tập trung vào dữ kiện bất ngờ nhất của từng mục để vừa vặn thời lượng.
 3. Scene cuối: type="follow", headline="THEO DÕI ĐỂ XEM THÊM", text="Bấm theo dõi kênh để khám phá thêm nhiều điều thú vị mỗi ngày."
 
 PHONG CÁCH VIẾT:
 - Giọng kể tò mò, phấn khích, truyền cảm hứng khám phá
-- Dùng số liệu cụ thể, so sánh trực quan (ví dụ: "gấp 10 lần kích thước Trái Đất")
-- Mỗi scene như một "fact" hoặc "khám phá" riêng biệt
-- Nếu bài viết dạng Top/Danh sách, đánh số từng mục rõ ràng
-
-CHỈ sử dụng 4 loại headline: "KHÁM PHÁ THÚ VỊ", "SỰ THẬT BẤT NGỜ", "GIẢI MÃ BÍ ẨN", "ĐIỀU ÍT AI BIẾT".
+- Dùng số liệu cụ thể, so sánh trực quan
+- TUYỆT ĐỐI KHÔNG BỎ RƠI CÁC MỤC CUỐI CỦA BÀI BÁO!
 
 BẮT BUỘC trả về đúng định dạng JSON Array (KHÔNG dùng markdown ```json, CHỈ xuất JSON thuần):
 [
   {{"id": 1, "type": "title_hero", "headline": "{title}", "text": "{title}", "motion": "zoom_in"}},
   {{"id": 2, "type": "news_detail", "headline": "KHÁM PHÁ THÚ VỊ", "text": "Câu giới thiệu chủ đề.", "motion": "pan"}},
-  {{"id": 3, "type": "news_detail", "headline": "SỰ THẬT BẤT NGỜ", "text": "Một sự thật thú vị.", "motion": "zoom_out"}},
-  {{"id": 4, "type": "news_detail", "headline": "GIẢI MÃ BÍ ẨN", "text": "Giải thích khoa học.", "motion": "pan"}},
-  {{"id": 5, "type": "news_detail", "headline": "ĐIỀU ÍT AI BIẾT", "text": "Chi tiết bất ngờ.", "motion": "zoom_out"}},
-  {{"id": 6, "type": "follow", "headline": "THEO DÕI ĐỂ XEM THÊM", "text": "Bấm theo dõi kênh để khám phá thêm nhiều điều thú vị mỗi ngày.", "motion": "static"}}
+  {{"id": 3, "type": "news_detail", "headline": "SỰ THẬT BẤT NGỜ", "text": "Số 1: ...", "motion": "zoom_out"}},
+  ...
+  {{"id": 9, "type": "follow", "headline": "THEO DÕI ĐỂ XEM THÊM", "text": "Bấm theo dõi kênh để khám phá thêm nhiều điều thú vị mỗi ngày.", "motion": "static"}}
 ]
 
-BÀI VIẾT:
+BÀI VIẾT ĐẦY ĐỦ:
 Tiêu đề: {title}
 Nguồn: {source}
-Nội dung: {content[:3500]}
+Nội dung: {content[:8000]}
 """
 
     elif video_style == "tong_hop":
@@ -440,7 +441,7 @@ BẮT BUỘC trả về đúng định dạng JSON Array các đối tượng sa
 BÀI BÁO:
 Tiêu đề: {title}
 Nguồn: {source}
-Nội dung: {content[:3500]}
+Nội dung: {content[:8000]}
 """
 
     import requests
