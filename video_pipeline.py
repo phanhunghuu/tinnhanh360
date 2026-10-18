@@ -231,6 +231,15 @@ def render_full_video(
         _make_solid_bg(default_bg)
         bg_images.append(default_bg)
 
+    # Lấy tiêu đề chính của bài báo từ scene đầu tiên (title_hero)
+    article_title = ""
+    for sc in scenes:
+        if sc.get("type") == "title_hero":
+            article_title = sc.get("headline") or sc.get("text", "")
+            break
+    if not article_title and scenes:
+        article_title = scenes[0].get("headline") or scenes[0].get("text", "")
+
     clip_paths = []
     # Danh sách hiệu ứng phong phú để hoán đổi nếu dùng lại 1 ảnh
     motion_cycle = ["zoom_in", "pan", "zoom_out"]
