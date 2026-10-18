@@ -351,9 +351,17 @@
             </select>
           </div>
           <div class="form-group">
-            <label>Zalo AI Key:</label>
-            <input id="zaloKey" type="text" value="c6B974D16LbRHcSR1hRGGswtXV0LUOr6" placeholder="Nhập Zalo AI API Key">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <label>Tốc độ đọc:</label>
+              <span id="voiceSpeedLabel" style="font-weight:700; color:#38bdf8; font-size:13px;">1.10x (Nhanh vừa)</span>
+            </div>
+            <input type="range" id="voiceSpeedSlider" min="0.80" max="1.50" step="0.05" value="1.10" style="width:100%; accent-color:#38bdf8; cursor:pointer;" oninput="updateSpeedLabel(this.value)">
           </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 4px;">
+          <label style="font-size:12px; color:var(--muted);">Zalo AI Key (Chỉ cần nếu chọn giọng Zalo AI):</label>
+          <input id="zaloKey" type="text" value="c6B974D16LbRHcSR1hRGGswtXV0LUOr6" placeholder="Nhập Zalo AI API Key" style="font-size:12px; padding:6px 10px;">
         </div>
 
         <button class="btn btn-render" id="btnRender" onclick="renderVideo()">
@@ -720,6 +728,18 @@
     document.getElementById('bgmVolumeSlider').style.opacity = isChecked ? '1' : '0.4';
   }
 
+  function updateSpeedLabel(val) {
+    const num = parseFloat(val);
+    let desc = 'Bình thường';
+    if (num <= 0.85) desc = 'Rất chậm';
+    else if (num < 1.0) desc = 'Hơi chậm';
+    else if (num === 1.0) desc = 'Tiêu chuẩn (1.0x)';
+    else if (num <= 1.15) desc = 'Nhanh vừa';
+    else if (num <= 1.30) desc = 'Nhanh thời sự';
+    else desc = 'Rất nhanh';
+    document.getElementById('voiceSpeedLabel').innerText = `${num.toFixed(2)}x (${desc})`;
+  }
+
   window.addEventListener('DOMContentLoaded', checkBgmStatus);
 
   /* ── Render with Real-Time Progress ──────────────────────── */
@@ -781,6 +801,7 @@
     try {
       const useBgm = document.getElementById('bgmToggle') ? document.getElementById('bgmToggle').checked : true;
       const bgmVol = document.getElementById('bgmVolumeSlider') ? (parseInt(document.getElementById('bgmVolumeSlider').value) / 100) : 0.10;
+      const vSpeed = document.getElementById('voiceSpeedSlider') ? parseFloat(document.getElementById('voiceSpeedSlider').value) : 1.05;
 
       const res = await fetch('/api/render-video', {
         method: 'POST',
@@ -791,6 +812,7 @@
           images: currentData.images,
           scenes: currentData.scenes,
           voice: document.getElementById('voiceSelect').value,
+          voice_speed: vSpeed,
           zalo_key: document.getElementById('zaloKey') ? document.getElementById('zaloKey').value.trim() : null,
           use_bgm: useBgm,
           bgm_volume: bgmVol,

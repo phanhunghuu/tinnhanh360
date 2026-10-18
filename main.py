@@ -62,6 +62,7 @@ class RenderRequest(BaseModel):
     images: List[str] = []
     scenes: List[dict]
     voice: str = "zalo-3"
+    voice_speed: float = 1.05
     zalo_key: Optional[str] = "c6B974D16LbRHcSR1hRGGswtXV0LUOr6"
     use_bgm: bool = True
     bgm_volume: float = 0.10
@@ -306,7 +307,8 @@ def execute_render_job(job_id: str, req_data: dict):
                 text=scene["text"],
                 voice=req_data["voice"],
                 audio_path=audio_path,
-                zalo_api_key=req_data.get("zalo_key") or "c6B974D16LbRHcSR1hRGGswtXV0LUOr6"
+                zalo_api_key=req_data.get("zalo_key") or "c6B974D16LbRHcSR1hRGGswtXV0LUOr6",
+                voice_speed=float(req_data.get("voice_speed", 1.05))
             )
             if not result or result.get("duration", 0) <= 0.2:
                 raise Exception(f"Không thể tạo giọng đọc cho cảnh {idx + 1} ('{scene.get('headline', '')}'). Vui lòng kiểm tra lại kết nối mạng hoặc đổi giọng đọc khác.")
@@ -378,6 +380,7 @@ async def render_video(req: RenderRequest):
         "images": req.images,
         "scenes": req.scenes,
         "voice": req.voice,
+        "voice_speed": req.voice_speed,
         "zalo_key": req.zalo_key,
         "use_bgm": req.use_bgm,
         "bgm_volume": req.bgm_volume,

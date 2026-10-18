@@ -40,6 +40,62 @@ def get_kokoro_tts(voice_name: str):
     return _kokoro_instances[voice_name]
 
 
+import re
+from num2words import num2words
+
+def normalize_vietnamese_text_for_tts(text: str) -> str:
+    """
+    Chuẩn hóa các con số, ngày tháng, phần trăm, nhiệt độ thành chữ tiếng Việt
+    giúp mô hình Kokoro AI đọc tròn vành rõ chữ 100%.
+    """
+    if not text:
+        return ""
+
+    # 1. Ngày tháng năm: 15/10/2026 hoặc 15-10-2026
+    def _replace_date(m):
+        prefix = m.group(1) or ''
+        d, mth, y = int(m.group(2)), int(m.group(3)), int(m.group(4))
+        date_words = f'{num2words(d, lang="vi")} tháng {num2words(mth, lang="vi")} năm {num2words(y, lang="vi")}'
+        if 'ngày' in prefix.lower():
+            return f'{prefix}{date_words}'
+        return f'{prefix}ngày {date_words}'
+
+    text = re.sub(r'(\bngày\s+)?\b(\d{1,2})[/-](\d{1,2})[/-](\d{4})\b', _replace_date, text, flags=re.IGNORECASE)
+
+    # 2. Ngày/tháng không có năm: 15/10
+    def _replace_dm(m):
+        prefix = m.group(1) or ''
+        d, mth = int(m.group(2)), int(m.group(3))
+        dm_words = f'{num2words(d, lang="vi")} tháng {num2words(mth, lang="vi")}'
+        if 'ngày' in prefix.lower():
+            return f'{prefix}{dm_words}'
+        return f'{prefix}ngày {dm_words}'
+
+    text = re.sub(r'(\bngày\s+)?\b(\d{1,2})[/](\d{1,2})\b', _replace_dm, text, flags=re.IGNORECASE)
+
+    # 3. Đổi số có dấu chấm hàng nghìn trước (ví dụ 990.000 -> chín trăm chín mươi nghìn)
+    def _clean_thousands(m):
+        raw = m.group(0).replace('.', '')
+        return num2words(int(raw), lang='vi')
+    text = re.sub(r'\b\d{1,3}(?:\.\d{3})+\b', _clean_thousands, text)
+
+    # 4. Phần trăm: 25% -> hai mươi lăm phần trăm
+    text = re.sub(r'(\d+)\s*%', lambda m: f'{num2words(int(m.group(1)), lang="vi")} phần trăm', text)
+
+    # 5. Nhiệt độ âm / độ C: -46 độ C, 35°C
+    text = re.sub(r'-\s*(\d+)\s*(?:độ\s*C|°C)', lambda m: f'âm {num2words(int(m.group(1)), lang="vi")} độ C', text)
+    text = re.sub(r'(\d+)\s*°C', lambda m: f'{num2words(int(m.group(1)), lang="vi")} độ C', text)
+    text = re.sub(r'(?<=\s)-\s*(\d+)', lambda m: f'âm {num2words(int(m.group(1)), lang="vi")}', text)
+
+    # 6. Số thứ tự: Số 3, Top 5
+    text = re.sub(r'\b(Số|Top|Mục)\s*(\d+)\b', lambda m: f'{m.group(1)} {num2words(int(m.group(2)), lang="vi")}', text, flags=re.IGNORECASE)
+
+    # 7. Số nguyên còn lại
+    text = re.sub(r'\b\d+\b', lambda m: num2words(int(m.group(0)), lang='vi'), text)
+
+    return text
+
+
 def _generate_kokoro_tts(text: str, voice: str, audio_path: str, speed: float = 1.05) -> bool:
     """Sinh audio bằng mô hình Kokoro-Vietnamese AI 100% offline, miễn phí."""
     import soundfile as sf
@@ -49,6 +105,9 @@ def _generate_kokoro_tts(text: str, voice: str, audio_path: str, speed: float = 
     clean_text = (text or "").strip()
     if not clean_text:
         clean_text = "..."
+
+    # Chuẩn hóa số và ngày tháng thành chữ trước khi nạp vào Kokoro
+    clean_text = normalize_vietnamese_text_for_tts(clean_text)
 
     try:
         tts = get_kokoro_tts(voice_key)
@@ -182,12 +241,14 @@ def generate_tts(
     voice: str,
     audio_path: str,
     rate: str = "+14%",
-    zalo_api_key: Optional[str] = None
+    zalo_api_key: Optional[str] = None,
+    voice_speed: float = 1.05
 ) -> dict:
     """
     Sinh audio từ text:
-    - Nếu voice là giọng Zalo và có API key -> Gọi Zalo AI TTS (tốc độ đọc nhanh 1.1).
-    - Ngược lại -> Gọi Edge-TTS AI Neural với tốc độ +14% và pitch -3Hz trầm ấm như MC thời sự VTV24.
+    - Nếu voice là Kokoro -> Sinh audio với voice_speed (ví dụ 1.0, 1.15, 1.25...)
+    - Nếu voice là Zalo và có API key -> Gọi Zalo AI TTS (tốc độ đọc nhanh voice_speed).
+    - Ngược lại -> Gọi Edge-TTS AI Neural với tốc độ tương ứng voice_speed.
     """
     text = (text or "").strip()
     if not text:
@@ -202,20 +263,25 @@ def generate_tts(
     edge_fallback_voice = "vi-VN-NamMinhNeural" if is_male else "vi-VN-HoaiMyNeural"
     pitch_tuned = "-3Hz" if is_male else "-1Hz"
 
+    # Tính toán rate cho Edge-TTS dựa trên voice_speed
+    # Ví dụ: 1.0 -> +0%, 1.15 -> +15%, 1.25 -> +25%
+    speed_pct = int(round((voice_speed - 1.0) * 100))
+    edge_rate = f"{speed_pct:+d}%" if speed_pct != 0 else "+0%"
+
     if use_kokoro:
-        success = _generate_kokoro_tts(text, voice, audio_path, speed=1.05)
+        success = _generate_kokoro_tts(text, voice, audio_path, speed=voice_speed)
         if not success:
             print(f"Kokoro TTS failed, fallbacking to Edge-TTS ({edge_fallback_voice})...")
-            boundaries = _run_in_thread(_stream_edge_tts(text, edge_fallback_voice, audio_path, rate=rate, pitch=pitch_tuned))
+            boundaries = _run_in_thread(_stream_edge_tts(text, edge_fallback_voice, audio_path, rate=edge_rate, pitch=pitch_tuned))
     elif use_zalo:
-        success = _generate_zalo_tts(text, voice, audio_path, zalo_api_key, speed=1.1)
+        success = _generate_zalo_tts(text, voice, audio_path, zalo_api_key, speed=voice_speed)
         if not success:
             print(f"Zalo AI failed, fallbacking to Edge-TTS ({edge_fallback_voice})...")
-            boundaries = _run_in_thread(_stream_edge_tts(text, edge_fallback_voice, audio_path, rate=rate, pitch=pitch_tuned))
+            boundaries = _run_in_thread(_stream_edge_tts(text, edge_fallback_voice, audio_path, rate=edge_rate, pitch=pitch_tuned))
     else:
         # Nếu chọn Edge-TTS
         edge_voice = voice if not (voice.startswith("zalo-") or voice.startswith("kokoro-")) else edge_fallback_voice
-        boundaries = _run_in_thread(_stream_edge_tts(text, edge_voice, audio_path, rate=rate, pitch=pitch_tuned))
+        boundaries = _run_in_thread(_stream_edge_tts(text, edge_voice, audio_path, rate=edge_rate, pitch=pitch_tuned))
 
     # Chuẩn hóa âm thanh đầu ra về chuẩn 44100Hz Stereo MP3
     try:
