@@ -20,11 +20,17 @@ ZALO_VOICES = {
 }
 
 KOKORO_VOICES = {
-    "kokoro-diem_trinh": {"voice": "diem_trinh", "name": "Kokoro AI - Diễm Trinh (Nữ - Truyền cảm)", "gender": "female"},
-    "kokoro-hung_thinh": {"voice": "hung_thinh", "name": "Kokoro AI - Hưng Thịnh (Nam - Trầm ấm, kể chuyện)", "gender": "male"},
-    "kokoro-mai_linh": {"voice": "mai_linh", "name": "Kokoro AI - Mai Linh (Nữ - Nhẹ nhàng)", "gender": "female"},
+    "kokoro-hung_thinh": {"voice": "hung_thinh", "name": "Kokoro AI - Hưng Thịnh (Nam - Trầm ấm)", "gender": "male"},
+    "kokoro-phat_tai": {"voice": "phat_tai", "name": "Kokoro AI - Phát Tài (Nam - Tự nhiên)", "gender": "male"},
+    "kokoro-thanh_dat": {"voice": "thanh_dat", "name": "Kokoro AI - Thành Đạt (Nam - Rõ ràng)", "gender": "male"},
+    "kokoro-duc_an": {"voice": "duc_an", "name": "Kokoro AI - Đức An (Nam - Trẻ trung)", "gender": "male"},
     "kokoro-manh_dung": {"voice": "manh_dung", "name": "Kokoro AI - Mạnh Dũng (Nam - Uy quyền)", "gender": "male"},
-    "kokoro-tuan_ngoc": {"voice": "tuan_ngoc", "name": "Kokoro AI - Tuấn Ngọc (Nam - Trầm ấm)", "gender": "male"},
+    "kokoro-tuan_ngoc": {"voice": "tuan_ngoc", "name": "Kokoro AI - Tuấn Ngọc (Nam - Đĩnh đạc)", "gender": "male"},
+    "kokoro-diem_trinh": {"voice": "diem_trinh", "name": "Kokoro AI - Diễm Trinh (Nữ - Truyền cảm)", "gender": "female"},
+    "kokoro-my_yen": {"voice": "my_yen", "name": "Kokoro AI - Mỹ Yến (Nữ - Ngọt ngào)", "gender": "female"},
+    "kokoro-ngoc_huyen": {"voice": "ngoc_huyen", "name": "Kokoro AI - Ngọc Huyền (Nữ - Dịu dàng)", "gender": "female"},
+    "kokoro-mai_linh": {"voice": "mai_linh", "name": "Kokoro AI - Mai Linh (Nữ - Nhẹ nhàng)", "gender": "female"},
+    "kokoro-thuc_trinh": {"voice": "thuc_trinh", "name": "Kokoro AI - Thục Trinh (Nữ - Thanh thoát)", "gender": "female"},
 }
 
 _kokoro_instances = {}
