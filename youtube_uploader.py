@@ -186,11 +186,11 @@ def upload_to_youtube(
     if progress_callback:
         progress_callback(90, "Video đã tải lên xong. Đang trích xuất khung hình đầu làm ảnh bìa...")
 
-    # TỰ ĐỘNG ĐẶT KHUNG HÌNH ĐẦU TIÊN LÀM THUMBNAIL
+    # TỰ ĐỘNG ĐẶT KHUNG HÌNH ĐẦU TIÊN LÀM THUMBNAIL (Nếu kênh có quyền)
     thumbnail_status = "none"
-    thumb_path = extract_first_frame(video_path, time_offset="00:00:00.800")
-    if thumb_path and os.path.exists(thumb_path):
-        try:
+    try:
+        thumb_path = extract_first_frame(video_path, time_offset="00:00:00.800")
+        if thumb_path and os.path.exists(thumb_path):
             if progress_callback:
                 progress_callback(95, "Đang đặt ảnh bìa tiêu đề cho video Shorts...")
             thumb_media = MediaFileUpload(thumb_path, mimetype="image/jpeg")
@@ -199,11 +199,12 @@ def upload_to_youtube(
                 media_body=thumb_media
             )
             thumb_response = thumb_request.execute()
-            print(f"[youtube_uploader] Đã gán thumbnail khung hình đầu tiên thành công cho video {video_id}: {thumb_response}")
+            print(f"[youtube_uploader] Da gan thumbnail thanh cong cho video {video_id}")
             thumbnail_status = "success"
-        except Exception as te:
-            print(f"[youtube_uploader] Không thể tự động set thumbnail qua API: {te}")
-            thumbnail_status = f"warning: {te}"
+    except Exception as te:
+        # Kênh YouTube chưa xác minh SĐT hoặc bị hạn chế Custom Thumbnail thì bỏ qua, video vẫn upload thành công
+        print(f"[youtube_uploader] Khong the set thumbnail qua API: {str(te)[:200]}")
+        thumbnail_status = f"warning: {str(te)[:100]}"
 
     if progress_callback:
         progress_callback(100, "Đăng YouTube Shorts hoàn tất!")
