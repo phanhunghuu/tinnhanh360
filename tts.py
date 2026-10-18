@@ -19,6 +19,61 @@ ZALO_VOICES = {
     "zalo-6": {"speaker_id": 6, "name": "Zalo AI - Nữ Miền Nam 2"},
 }
 
+KOKORO_VOICES = {
+    "kokoro-diem_trinh": {"voice": "diem_trinh", "name": "Kokoro AI - Diễm Trinh (Nữ - Truyền cảm)", "gender": "female"},
+    "kokoro-hung_thinh": {"voice": "hung_thinh", "name": "Kokoro AI - Hưng Thịnh (Nam - Trầm ấm, kể chuyện)", "gender": "male"},
+    "kokoro-mai_linh": {"voice": "mai_linh", "name": "Kokoro AI - Mai Linh (Nữ - Nhẹ nhàng)", "gender": "female"},
+    "kokoro-manh_dung": {"voice": "manh_dung", "name": "Kokoro AI - Mạnh Dũng (Nam - Uy quyền)", "gender": "male"},
+    "kokoro-tuan_ngoc": {"voice": "tuan_ngoc", "name": "Kokoro AI - Tuấn Ngọc (Nam - Trầm ấm)", "gender": "male"},
+}
+
+_kokoro_instances = {}
+
+def get_kokoro_tts(voice_name: str):
+    """Lấy hoặc khởi tạo instance KokoroVietnamese (cache theo giọng)."""
+    global _kokoro_instances
+    if voice_name not in _kokoro_instances:
+        from kokoro_vietnamese import KokoroVietnamese
+        import torch
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        _kokoro_instances[voice_name] = KokoroVietnamese(device=device, voice=voice_name)
+    return _kokoro_instances[voice_name]
+
+
+def _generate_kokoro_tts(text: str, voice: str, audio_path: str, speed: float = 1.05) -> bool:
+    """Sinh audio bằng mô hình Kokoro-Vietnamese AI 100% offline, miễn phí."""
+    import soundfile as sf
+    kokoro_info = KOKORO_VOICES.get(voice)
+    voice_key = kokoro_info["voice"] if kokoro_info else "diem_trinh"
+
+    clean_text = (text or "").strip()
+    if not clean_text:
+        clean_text = "..."
+
+    try:
+        tts = get_kokoro_tts(voice_key)
+        audio, _ = tts.synthesize(clean_text, speed=speed)
+        if audio is None or len(audio) == 0:
+            return False
+
+        temp_wav = audio_path + ".tmp.wav"
+        sf.write(temp_wav, audio, 24000)
+
+        # Chuyển đổi và chuẩn hóa âm thanh sang mp3 44100Hz Stereo
+        subprocess.run([
+            "ffmpeg", "-y", "-i", temp_wav,
+            "-ar", "44100", "-ac", "2", "-b:a", "192k",
+            audio_path
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        if os.path.exists(temp_wav):
+            os.remove(temp_wav)
+        return True
+    except Exception as e:
+        print(f"Kokoro TTS generation error: {e}")
+        return False
+
+
 
 def _generate_zalo_tts(text: str, voice: str, audio_path: str, api_key: str, speed: float = 1.1) -> bool:
     """Gọi API Zalo AI để sinh file âm thanh wav/mp3 với polling chờ file ready."""
@@ -140,20 +195,26 @@ def generate_tts(
 
     boundaries = []
     use_zalo = voice.startswith("zalo-") and bool(zalo_api_key)
+    use_kokoro = voice.startswith("kokoro-")
 
     # Ánh xạ giới tính khi cần fallback sang Edge-TTS
-    is_male = voice in ["zalo-3", "zalo-4", "vi-VN-NamMinhNeural"]
+    is_male = voice in ["zalo-3", "zalo-4", "vi-VN-NamMinhNeural", "kokoro-hung_thinh", "kokoro-manh_dung", "kokoro-tuan_ngoc"]
     edge_fallback_voice = "vi-VN-NamMinhNeural" if is_male else "vi-VN-HoaiMyNeural"
     pitch_tuned = "-3Hz" if is_male else "-1Hz"
 
-    if use_zalo:
+    if use_kokoro:
+        success = _generate_kokoro_tts(text, voice, audio_path, speed=1.05)
+        if not success:
+            print(f"Kokoro TTS failed, fallbacking to Edge-TTS ({edge_fallback_voice})...")
+            boundaries = _run_in_thread(_stream_edge_tts(text, edge_fallback_voice, audio_path, rate=rate, pitch=pitch_tuned))
+    elif use_zalo:
         success = _generate_zalo_tts(text, voice, audio_path, zalo_api_key, speed=1.1)
         if not success:
             print(f"Zalo AI failed, fallbacking to Edge-TTS ({edge_fallback_voice})...")
             boundaries = _run_in_thread(_stream_edge_tts(text, edge_fallback_voice, audio_path, rate=rate, pitch=pitch_tuned))
     else:
         # Nếu chọn Edge-TTS
-        edge_voice = voice if not voice.startswith("zalo-") else edge_fallback_voice
+        edge_voice = voice if not (voice.startswith("zalo-") or voice.startswith("kokoro-")) else edge_fallback_voice
         boundaries = _run_in_thread(_stream_edge_tts(text, edge_voice, audio_path, rate=rate, pitch=pitch_tuned))
 
     # Chuẩn hóa âm thanh đầu ra về chuẩn 44100Hz Stereo MP3
