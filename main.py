@@ -3,6 +3,7 @@ Main FastAPI server
 """
 import os
 import re
+import time
 import uuid
 import unicodedata
 from fastapi import FastAPI, HTTPException
@@ -117,6 +118,41 @@ def bgm_status():
         "size_kb": size_kb,
         "default_volume": 0.10
     }
+
+
+class VoicePreviewRequest(BaseModel):
+    voice: str
+    voice_speed: float = 1.05
+    zalo_key: Optional[str] = None
+
+
+@app.post("/api/preview-voice")
+def preview_voice(req: VoicePreviewRequest):
+    """Sinh một đoạn audio mẫu ngắn (3-4 giây) để người dùng nghe thử giọng đọc và tốc độ."""
+    try:
+        sample_text = "Xin chào, đây là giọng đọc thử nghiệm của Tin Nhanh 360 với tốc độ được chọn."
+        safe_voice = re.sub(r'[^a-zA-Z0-9_-]', '', req.voice)
+        preview_filename = f"preview_{safe_voice}_{int(req.voice_speed*100)}.mp3"
+        preview_path = os.path.join(OUTPUT_DIR, preview_filename)
+
+        res = generate_tts(
+            text=sample_text,
+            voice=req.voice,
+            audio_path=preview_path,
+            zalo_api_key=req.zalo_key or "c6B974D16LbRHcSR1hRGGswtXV0LUOr6",
+            voice_speed=req.voice_speed
+        )
+        if not res or res.get("is_silent"):
+            raise Exception("Không thể tạo file âm thanh nghe thử.")
+
+        return {
+            "success": True,
+            "audio_url": f"/outputs/{preview_filename}?t={int(time.time())}"
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 from youtube_uploader import is_youtube_configured, is_youtube_authenticated, upload_to_youtube

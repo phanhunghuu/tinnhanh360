@@ -329,8 +329,13 @@
 
         <div class="row2" style="margin-top: 18px;">
           <div class="form-group">
-            <label>Giọng đọc:</label>
-            <select id="voiceSelect">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+              <label style="margin-bottom:0;">Giọng đọc:</label>
+              <button type="button" id="btnPreviewVoice" onclick="playVoicePreview()" style="background:rgba(56,189,248,0.15); border:1px solid rgba(56,189,248,0.3); color:#38bdf8; padding:3px 10px; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer; display:flex; align-items:center; gap:5px; transition:all .2s;">
+                <span id="previewVoiceIcon">🔊</span> <span id="previewVoiceText">Nghe thử</span>
+              </button>
+            </div>
+            <select id="voiceSelect" onchange="stopVoicePreview()">
               <optgroup label="✨ Kokoro AI (Giọng Người Thật - Miễn Phí 100% Cực Kỳ Truyền Cảm)">
                 <option value="kokoro-hung_thinh" selected>🎙️ Kokoro - Hưng Thịnh (Nam - Trầm ấm, kể chuyện vụ án & khoa học)</option>
                 <option value="kokoro-diem_trinh">🎙️ Kokoro - Diễm Trinh (Nữ - Truyền cảm, chuẩn tin tức)</option>
@@ -349,6 +354,7 @@
                 <option value="zalo-4">Zalo AI - Nam Miền Bắc (Trầm ấm)</option>
               </optgroup>
             </select>
+            <audio id="voicePreviewAudio" style="display:none;"></audio>
           </div>
           <div class="form-group">
             <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -738,6 +744,76 @@
     else if (num <= 1.30) desc = 'Nhanh thời sự';
     else desc = 'Rất nhanh';
     document.getElementById('voiceSpeedLabel').innerText = `${num.toFixed(2)}x (${desc})`;
+    stopVoicePreview();
+  }
+
+  /* ── Nghe thử giọng đọc (Voice Preview) ───────────────────── */
+  let isPreviewPlaying = false;
+
+  function stopVoicePreview() {
+    const audio = document.getElementById('voicePreviewAudio');
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+    const btn = document.getElementById('btnPreviewVoice');
+    if (btn) {
+      btn.style.background = 'rgba(56,189,248,0.15)';
+      btn.style.borderColor = 'rgba(56,189,248,0.3)';
+      document.getElementById('previewVoiceIcon').innerText = '🔊';
+      document.getElementById('previewVoiceText').innerText = 'Nghe thử';
+    }
+    isPreviewPlaying = false;
+  }
+
+  async function playVoicePreview() {
+    const audio = document.getElementById('voicePreviewAudio');
+    const btn = document.getElementById('btnPreviewVoice');
+    const icon = document.getElementById('previewVoiceIcon');
+    const txt = document.getElementById('previewVoiceText');
+
+    if (isPreviewPlaying) {
+      stopVoicePreview();
+      return;
+    }
+
+    const voice = document.getElementById('voiceSelect').value;
+    const speed = document.getElementById('voiceSpeedSlider') ? parseFloat(document.getElementById('voiceSpeedSlider').value) : 1.10;
+    const zaloKey = document.getElementById('zaloKey') ? document.getElementById('zaloKey').value.trim() : null;
+
+    btn.disabled = true;
+    icon.innerHTML = '<span class="spinner" style="width:10px;height:10px;border-width:2px;"></span>';
+    txt.innerText = 'Đang tải...';
+
+    try {
+      const res = await fetch('/api/preview-voice', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          voice: voice,
+          voice_speed: speed,
+          zalo_key: zaloKey
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Không thể tạo âm thanh mẫu');
+
+      audio.src = data.audio_url;
+      audio.onended = () => stopVoicePreview();
+      audio.onerror = () => stopVoicePreview();
+
+      await audio.play();
+      isPreviewPlaying = true;
+      btn.disabled = false;
+      btn.style.background = 'rgba(239,68,68,0.2)';
+      btn.style.borderColor = 'rgba(239,68,68,0.4)';
+      icon.innerText = '⏹️';
+      txt.innerText = 'Dừng';
+    } catch (e) {
+      btn.disabled = false;
+      stopVoicePreview();
+      alert('❌ Lỗi nghe thử giọng: ' + e.message);
+    }
   }
 
   window.addEventListener('DOMContentLoaded', checkBgmStatus);
