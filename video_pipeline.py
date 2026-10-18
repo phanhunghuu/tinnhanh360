@@ -308,7 +308,8 @@ def render_full_video(
                 content_text=text,
                 source=source_name,
                 date_str=date_str,
-                out_path=ovl_path
+                out_path=ovl_path,
+                article_title=article_title
             )
             render_scene_clip(
                 photo_path=current_photo,

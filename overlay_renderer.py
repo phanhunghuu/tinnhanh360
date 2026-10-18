@@ -49,8 +49,9 @@ LOGO_WHITE_PATH = os.path.join(BASE_DIR, "assets", "logo_white_clean.png")
 FOLLOW_FRAME_PATH = os.path.join(BASE_DIR, "assets", "follow_frame_1080.png")
 
 # ── Vị trí inset frame (khung ảnh) ──
-HERO_INSET = {"x": 108, "y": 300, "w": 864, "h": 660, "radius": 32}
-DETAIL_INSET = {"x": 108, "y": 340, "w": 864, "h": 720, "radius": 32}
+# Đặt khung ảnh ở giữa (y=490, h=670), chừa phần TRÊN (y=240-465) cho Tiêu đề chính + Vạch đỏ
+HERO_INSET = {"x": 108, "y": 490, "w": 864, "h": 670, "radius": 32}
+DETAIL_INSET = {"x": 108, "y": 490, "w": 864, "h": 670, "radius": 32}
 
 
 def _font_black(size: int) -> ImageFont.FreeTypeFont:
@@ -87,6 +88,40 @@ def _wrap(text: str, font, max_w: int, draw: ImageDraw.Draw) -> List[str]:
     if cur:
         lines.append(" ".join(cur))
     return lines or [text]
+
+
+def _draw_top_title(draw: ImageDraw.Draw, title: str, start_y: int = 250, max_bottom: int = 470):
+    """
+    Vẽ tiêu đề chính NẰM PHÍA TRÊN KHUNG ẢNH kèm vạch đỏ dọc bên trái đúng như mẫu.
+    Đảm bảo xuất hiện đồng nhất trên cả Frame Title và tất cả Frame Detail.
+    """
+    max_text_w = W - 280
+    for font_size in [52, 46, 40, 36]:
+        font_title = _font_black(font_size)
+        lines = _wrap(title, font_title, max_text_w, draw)
+        line_h = font_size + 12
+        total_h = len(lines) * line_h
+        if start_y + total_h <= max_bottom:
+            break
+
+    # Vạch đỏ dọc bên trái tiêu đề
+    bar_x = 108
+    bar_w = 12
+    draw.rounded_rectangle(
+        [(bar_x, start_y + 2), (bar_x + bar_w, start_y + total_h - 2)],
+        radius=5, fill=(220, 18, 28, 255)
+    )
+
+    # Vẽ chữ tiêu đề
+    text_x = 148
+    for i, line in enumerate(lines):
+        y = start_y + i * line_h
+        if y + line_h > max_bottom + 10:
+            break
+        draw.text((text_x + 2, y + 2), line, font=font_title, fill=(0, 0, 0, 200))
+        draw.text((text_x, y), line, font=font_title, fill=(255, 255, 255, 255))
+
+    return start_y + total_h
 
 
 def get_current_date_str() -> str:
@@ -221,7 +256,7 @@ def _cut_inset_hole(img: Image.Image, inset: dict) -> Image.Image:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 1. FRAME 1: TITLE HERO (Ảnh trong khung bo tròn + tiêu đề phía dưới)
+# 1. FRAME 1: TITLE HERO (Tiêu đề trên + Khung ảnh ở giữa + Ngày đăng ở đáy)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def make_title_hero_overlay(
@@ -232,15 +267,11 @@ def make_title_hero_overlay(
     out_path: str
 ) -> Dict:
     """
-    Tạo Frame 1 (Title Hero) - overlay PNG có lỗ trống bo tròn cho zoompan.
-
-    Layout:
-    - Nền mờ cinematic + phủ tối
-    - Badge Nguồn (top-left) + Logo (top-right)
-    - Khung ảnh bo tròn 32px tại HERO_INSET (lỗ trống = zoompan hiện qua)
-    - Gradient đen + Tiêu đề Inter-Black 900 + Vạch đỏ + Ngày đăng
-
-    Returns: {"overlay_path": str, "inset": dict}
+    Tạo Frame 1 (Title Hero) theo mẫu chuẩn:
+    - Top: Badge Nguồn + Logo
+    - TRÊN ẢNH: Tiêu đề Inter-Black 900 + Vạch đỏ
+    - GIỮA: Khung ảnh bo tròn 32px (lỗ trống cho zoompan)
+    - ĐÁY: Ngày đăng ở góc dưới thấp (1780)
     """
     inset = HERO_INSET.copy()
     canvas = Image.new("RGBA", (W, H), (18, 18, 22, 255))
@@ -251,74 +282,21 @@ def make_title_hero_overlay(
 
     draw = ImageDraw.Draw(canvas)
 
-    # 2. Viền khung ảnh (vẽ TRƯỚC khi cắt lỗ trống)
+    # 2. Viền khung ảnh
     _draw_inset_border(draw, inset)
 
     # 3. Logo + Source badge
-    _draw_logo(canvas, is_dark_bg=True, target_w=250, top=100, right=80)
-    draw = ImageDraw.Draw(canvas)  # refresh sau alpha_composite
-    _draw_source_pill(draw, source, top=110, left=80)
-
-    # 4. Gradient đen mờ dần từ dưới lên (0% ở đáy khung ảnh -> 100% ở đáy màn hình)
-    grad_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    g_draw = ImageDraw.Draw(grad_layer)
-    grad_start = inset["y"] + inset["h"]  # Bắt đầu ngay tại đáy khung ảnh
-    for y_pos in range(grad_start, H):
-        factor = (y_pos - grad_start) / (H - grad_start)
-        alpha = int(255 * (factor ** 0.85))
-        g_draw.line([(0, y_pos), (W, y_pos)], fill=(0, 0, 0, alpha))
-    canvas.alpha_composite(grad_layer)
+    _draw_logo(canvas, is_dark_bg=True, target_w=240, top=95, right=80)
     draw = ImageDraw.Draw(canvas)
+    _draw_source_pill(draw, source, top=105, left=80)
 
-    # 5. Tiêu đề Inter-Black 900
-    font_size = 62
-    font_title = _font_black(font_size)
-    max_text_w = W - 280
-    lines = _wrap(title, font_title, max_text_w, draw)
+    # 4. Tiêu đề chính NẰM TRÊN KHUNG ẢNH
+    _draw_top_title(draw, title, start_y=245, max_bottom=inset["y"] - 20)
 
-    # Co chữ nếu quá dài
-    if len(lines) > 5:
-        font_size = 52
-        font_title = _font_black(font_size)
-        lines = _wrap(title, font_title, max_text_w, draw)
-    elif len(lines) > 4:
-        font_size = 56
-        font_title = _font_black(font_size)
-        lines = _wrap(title, font_title, max_text_w, draw)
+    # 5. Dời Ngày đăng xuống đáy thấp (1780)
+    _draw_date(draw, date_str or get_current_date_str(), left=108, bottom=1780)
 
-    line_h = font_size + 14
-    total_h = len(lines) * line_h
-
-    # Vị trí tiêu đề: dưới khung ảnh, trên ngày đăng
-    inset_bottom = inset["y"] + inset["h"]
-    title_area_top = inset_bottom + 50
-    title_area_bottom = 1680
-    # Căn giữa trong vùng available
-    available = title_area_bottom - title_area_top
-    if total_h < available:
-        start_y = title_area_top + (available - total_h) // 3  # Thiên về trên 1/3
-    else:
-        start_y = title_area_top
-
-    # Vạch đỏ dọc bên trái tiêu đề
-    bar_x = 108
-    bar_w = 14
-    draw.rounded_rectangle(
-        [(bar_x, start_y + 4), (bar_x + bar_w, start_y + total_h - 4)],
-        radius=6, fill=(220, 18, 28, 255)
-    )
-
-    # Vẽ tiêu đề
-    text_x = 155
-    for i, line in enumerate(lines):
-        y = start_y + i * line_h
-        draw.text((text_x + 3, y + 3), line, font=font_title, fill=(0, 0, 0, 200))
-        draw.text((text_x, y), line, font=font_title, fill=(255, 255, 255, 255))
-
-    # 6. Ngày đăng
-    _draw_date(draw, date_str or get_current_date_str(), left=108, bottom=1720)
-
-    # 7. Cắt lỗ trống bo tròn tại inset (ảnh zoompan sẽ hiện qua đây)
+    # 6. Cắt lỗ trống bo tròn tại inset (ảnh zoompan sẽ hiện qua đây)
     canvas = _cut_inset_hole(canvas, inset)
 
     canvas.save(out_path, "PNG")
@@ -326,7 +304,7 @@ def make_title_hero_overlay(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 2. FRAME 2: DETAIL FRAME (Ảnh trong khung + subtitle phía dưới)
+# 2. FRAME 2: DETAIL FRAME (Tiêu đề trên + Khung ảnh giữa + Subtitle dưới)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def create_detail_frame_image(
@@ -335,18 +313,16 @@ def create_detail_frame_image(
     content_text: str,
     source: str,
     date_str: str,
-    out_path: str
+    out_path: str,
+    article_title: str = ""
 ) -> Dict:
     """
-    Tạo frame chi tiết - overlay PNG có lỗ trống bo tròn cho zoompan.
-
-    Layout:
-    - Nền mờ cinematic + phủ tối
-    - Badge Nguồn + Badge đỏ headline + Logo trắng
-    - Khung ảnh bo tròn 32px tại DETAIL_INSET (lỗ trống = zoompan)
-    - Subtitle auto-scale phía dưới + Ngày đăng
-
-    Returns: {"overlay_path": str, "inset": dict}
+    Tạo frame chi tiết chuẩn như hình mẫu:
+    - Top: Badge Nguồn + Badge đỏ DIỄN BIẾN + Logo
+    - TRÊN ẢNH: Tiêu đề bài báo luôn hiển thị cố định + vạch đỏ (giúp mọi frame đều có tiêu đề)
+    - GIỮA: Khung ảnh bo tròn
+    - DƯỚI ẢNH: Subtitle lời đọc MC (auto-scale)
+    - ĐÁY: Ngày đăng ở góc dưới thấp (1780)
     """
     inset = DETAIL_INSET.copy()
     canvas = Image.new("RGBA", (W, H), (18, 18, 22, 255))
@@ -361,16 +337,20 @@ def create_detail_frame_image(
     _draw_inset_border(draw, inset)
 
     # 3. Badges + Logo
-    b1_bot = _draw_source_pill(draw, source, top=110, left=80)
+    b1_bot = _draw_source_pill(draw, source, top=85, left=80)
     badge_label = headline_badge or "DIỄN BIẾN VỤ VIỆC"
-    _draw_headline_pill(draw, badge_label, top=b1_bot + 14, left=80)
-    _draw_logo(canvas, is_dark_bg=True, target_w=250, top=100, right=80)
+    _draw_headline_pill(draw, badge_label, top=b1_bot + 10, left=80)
+    _draw_logo(canvas, is_dark_bg=True, target_w=240, top=85, right=80)
     draw = ImageDraw.Draw(canvas)
 
-    # 4. Subtitle text (auto-scale)
+    # 4. TIÊU ĐỀ BÀI BÁO NẰM TRÊN KHUNG ẢNH (Ghim cố định như hình mẫu)
+    if article_title:
+        _draw_top_title(draw, article_title, start_y=255, max_bottom=inset["y"] - 18)
+
+    # 5. Subtitle text nằm PHÍA DƯỚI KHUNG ẢNH
     inset_bottom = inset["y"] + inset["h"]
     text_start_y = inset_bottom + 45
-    max_text_bottom = 1640
+    max_text_bottom = 1720
 
     for font_size in [50, 44, 38, 32]:
         font_content = _font_bold(font_size)
@@ -385,13 +365,13 @@ def create_detail_frame_image(
         y = text_start_y + i * line_h
         if y + line_h > max_text_bottom:
             break
-        draw.text((130, y + 2), line, font=font_content, fill=(0, 0, 0, 160))
-        draw.text((128, y), line, font=font_content, fill=(255, 255, 255, 255))
+        draw.text((120, y + 2), line, font=font_content, fill=(0, 0, 0, 180))
+        draw.text((118, y), line, font=font_content, fill=(255, 255, 255, 255))
 
-    # 5. Ngày đăng
-    _draw_date(draw, date_str or get_current_date_str(), left=108, bottom=1660)
+    # 6. Dời ngày đăng xuống góc dưới thấp
+    _draw_date(draw, date_str or get_current_date_str(), left=108, bottom=1780)
 
-    # 6. Cắt lỗ trống bo tròn
+    # 7. Cắt lỗ trống bo tròn
     canvas = _cut_inset_hole(canvas, inset)
 
     canvas.save(out_path, "PNG")
