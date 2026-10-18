@@ -79,18 +79,30 @@ def normalize_vietnamese_text_for_tts(text: str) -> str:
         return num2words(int(raw), lang='vi')
     text = re.sub(r'\b\d{1,3}(?:\.\d{3})+\b', _clean_thousands, text)
 
-    # 4. Phần trăm: 25% -> hai mươi lăm phần trăm
-    text = re.sub(r'(\d+)\s*%', lambda m: f'{num2words(int(m.group(1)), lang="vi")} phần trăm', text)
+    # 4. Xử lý số thập phân tiếng Việt: 1,5 hoặc 1.5 hoặc 0,8 hoặc 12,75 -> một phẩy năm
+    def _replace_decimal(m):
+        int_part = int(m.group(1))
+        dec_str = m.group(2)
+        int_words = num2words(int_part, lang='vi')
+        dec_words = num2words(int(dec_str), lang='vi')
+        return f'{int_words} phẩy {dec_words}'
 
-    # 5. Nhiệt độ âm / độ C: -46 độ C, 35°C
+    # Bắt số thập phân có 1 hoặc 2 chữ số sau dấu phẩy/chấm (tránh nhầm với số hàng nghìn 3 chữ số)
+    text = re.sub(r'\b(\d+)[,.](\d{1,2})\b', _replace_decimal, text)
+
+    # 5. Phần trăm: 25% hoặc 0,8% -> phần trăm
+    text = re.sub(r'(\d+)\s*%', lambda m: f'{num2words(int(m.group(1)), lang="vi")} phần trăm', text)
+    text = re.sub(r'%', ' phần trăm', text)
+
+    # 6. Nhiệt độ âm / độ C: -46 độ C, 35°C
     text = re.sub(r'-\s*(\d+)\s*(?:độ\s*C|°C)', lambda m: f'âm {num2words(int(m.group(1)), lang="vi")} độ C', text)
     text = re.sub(r'(\d+)\s*°C', lambda m: f'{num2words(int(m.group(1)), lang="vi")} độ C', text)
     text = re.sub(r'(?<=\s)-\s*(\d+)', lambda m: f'âm {num2words(int(m.group(1)), lang="vi")}', text)
 
-    # 6. Số thứ tự: Số 3, Top 5
+    # 7. Số thứ tự: Số 3, Top 5
     text = re.sub(r'\b(Số|Top|Mục)\s*(\d+)\b', lambda m: f'{m.group(1)} {num2words(int(m.group(2)), lang="vi")}', text, flags=re.IGNORECASE)
 
-    # 7. Số nguyên còn lại
+    # 8. Số nguyên còn lại
     text = re.sub(r'\b\d+\b', lambda m: num2words(int(m.group(0)), lang='vi'), text)
 
     return text
