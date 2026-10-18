@@ -106,7 +106,8 @@ def upload_to_youtube(
     title: str,
     description: str = "",
     tags: Optional[list] = None,
-    privacy_status: str = "public"
+    privacy_status: str = "public",
+    progress_callback: Optional[callable] = None
 ) -> Dict:
     """
     Tải video lên YouTube Shorts và tự động đặt khung ảnh đầu tiên làm thumbnail (ảnh bìa).
@@ -114,9 +115,13 @@ def upload_to_youtube(
     - title: Tiêu đề video (tự động gắn thêm #Shorts nếu chưa có)
     - description: Mô tả chi tiết
     - privacy_status: 'public', 'unlisted', hoặc 'private'
+    - progress_callback: Hàm nhận (percent: int, message: str) để báo tiến trình realtime
     """
     if not os.path.exists(video_path):
         raise FileNotFoundError(f"Không tìm thấy file video: {video_path}")
+
+    if progress_callback:
+        progress_callback(5, "Đang kết nối xác thực tài khoản YouTube...")
 
     # Chuẩn hoá tiêu đề cho YouTube Shorts (tối đa 100 ký tự)
     clean_title = title.strip()
@@ -134,6 +139,9 @@ def upload_to_youtube(
 
     creds = get_youtube_credentials()
     youtube = build("youtube", "v3", credentials=creds)
+
+    if progress_callback:
+        progress_callback(15, "Đã kết nối YouTube thành công. Đang khởi tạo upload...")
 
     body = {
         "snippet": {
@@ -155,7 +163,7 @@ def upload_to_youtube(
         video_path,
         mimetype="video/mp4",
         resumable=True,
-        chunksize=1024 * 1024 * 4  # 4MB chunks
+        chunksize=1024 * 1024 * 2  # 2MB chunks để cập nhật tiến trình mượt hơn
     )
 
     request = youtube.videos().insert(
@@ -167,15 +175,24 @@ def upload_to_youtube(
     response = None
     while response is None:
         status, response = request.next_chunk()
+        if status and progress_callback:
+            # Quy đổi tiến trình chunk upload từ 20% đến 85%
+            pct = 20 + int(status.progress() * 65)
+            progress_callback(pct, f"Đang truyền dữ liệu video lên máy chủ YouTube ({int(status.progress() * 100)}%)...")
 
     video_id = response.get("id")
     video_url = f"https://www.youtube.com/shorts/{video_id}"
+
+    if progress_callback:
+        progress_callback(90, "Video đã tải lên xong. Đang trích xuất khung hình đầu làm ảnh bìa...")
 
     # TỰ ĐỘNG ĐẶT KHUNG HÌNH ĐẦU TIÊN LÀM THUMBNAIL
     thumbnail_status = "none"
     thumb_path = extract_first_frame(video_path, time_offset="00:00:00.800")
     if thumb_path and os.path.exists(thumb_path):
         try:
+            if progress_callback:
+                progress_callback(95, "Đang đặt ảnh bìa tiêu đề cho video Shorts...")
             thumb_media = MediaFileUpload(thumb_path, mimetype="image/jpeg")
             thumb_request = youtube.thumbnails().set(
                 videoId=video_id,
@@ -185,8 +202,11 @@ def upload_to_youtube(
             print(f"[youtube_uploader] Đã gán thumbnail khung hình đầu tiên thành công cho video {video_id}: {thumb_response}")
             thumbnail_status = "success"
         except Exception as te:
-            print(f"[youtube_uploader] Không thể tự động set thumbnail qua API (Kênh có thể chưa xác minh SĐT để bật Custom Thumbnail): {te}")
+            print(f"[youtube_uploader] Không thể tự động set thumbnail qua API: {te}")
             thumbnail_status = f"warning: {te}"
+
+    if progress_callback:
+        progress_callback(100, "Đăng YouTube Shorts hoàn tất!")
 
     return {
         "success": True,

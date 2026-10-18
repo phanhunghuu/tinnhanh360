@@ -136,11 +136,54 @@ def youtube_status():
     }
 
 
+yt_upload_jobs = {}
+
+def execute_youtube_upload(upload_id: str, video_abs_path: str, title: str, description: str, privacy: str):
+    def on_progress(percent: int, message: str):
+        if upload_id in yt_upload_jobs:
+            yt_upload_jobs[upload_id].update({
+                "percent": percent,
+                "message": message,
+            })
+
+    try:
+        yt_upload_jobs[upload_id].update({
+            "status": "uploading",
+            "percent": 5,
+            "message": "Đang kết nối YouTube..."
+        })
+        result = upload_to_youtube(
+            video_path=video_abs_path,
+            title=title,
+            description=description,
+            privacy_status=privacy,
+            progress_callback=on_progress
+        )
+        yt_upload_jobs[upload_id].update({
+            "status": "completed",
+            "percent": 100,
+            "message": "Đăng video thành công!",
+            "result": result
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        err_msg = str(e)
+        if "client_secrets.json" in err_msg:
+            err_msg = "Không tìm thấy file client_secrets.json trên server."
+        elif "consent" in err_msg or "authorization" in err_msg.lower():
+            err_msg = "Chưa cấp quyền Google OAuth hoặc link cấp quyền đã hết hạn. Vui lòng thử lại."
+        yt_upload_jobs[upload_id].update({
+            "status": "failed",
+            "message": f"Thất bại: {err_msg}",
+            "error": err_msg
+        })
+
+
 @app.post("/api/upload-youtube")
 def upload_youtube_endpoint(req: YouTubeUploadRequest):
-    """Đăng video lên YouTube Shorts."""
+    """Bắt đầu tiến trình upload YouTube Shorts với tracking tiến độ."""
     try:
-        # Đường dẫn file video từ video_url dạng /outputs/{job_id}/{filename}
         clean_url = req.video_url.lstrip("/")
         if clean_url.startswith("outputs/"):
             rel_path = clean_url[len("outputs/"):]
@@ -151,17 +194,36 @@ def upload_youtube_endpoint(req: YouTubeUploadRequest):
         if not os.path.exists(video_abs_path):
             raise Exception(f"Không tìm thấy file video trên server: {video_abs_path}")
 
-        result = upload_to_youtube(
-            video_path=video_abs_path,
-            title=req.title,
-            description=req.description,
-            privacy_status=req.privacy
+        import threading
+        upload_id = str(uuid.uuid4())[:8]
+        yt_upload_jobs[upload_id] = {
+            "status": "starting",
+            "percent": 2,
+            "message": "Đang chuẩn bị video...",
+            "result": None,
+            "error": None
+        }
+
+        t = threading.Thread(
+            target=execute_youtube_upload,
+            args=(upload_id, video_abs_path, req.title, req.description, req.privacy),
+            daemon=True
         )
-        return result
+        t.start()
+
+        return {"success": True, "upload_id": upload_id}
     except Exception as e:
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/youtube-upload-status/{upload_id}")
+def youtube_upload_status(upload_id: str):
+    """Kiểm tra tiến trình upload YouTube theo phần trăm."""
+    if upload_id in yt_upload_jobs:
+        return yt_upload_jobs[upload_id]
+    raise HTTPException(status_code=404, detail="Upload job not found")
 
 
 @app.post("/api/parse-article")

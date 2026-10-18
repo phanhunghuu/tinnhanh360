@@ -897,7 +897,18 @@
     resultBox.style.background = 'rgba(59,130,246,0.1)';
     resultBox.style.border = '1px solid rgba(59,130,246,0.3)';
     resultBox.style.color = '#93c5fd';
-    resultBox.innerHTML = '⏳ <strong>Đang kết nối YouTube API...</strong><br><span style="font-size:11px;color:#cbd5e1;">(Nếu là lần đầu tiên, trình duyệt sẽ mở tab Google để bạn cấp quyền đăng video vào kênh của mình).</span>';
+    resultBox.innerHTML = `
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <span id="ytProgressMsg" style="font-weight:600; font-size:12px;">⏳ Đang khởi tạo kết nối YouTube API...</span>
+        <span id="ytProgressPct" style="font-weight:700; font-size:13px; color:#60a5fa;">2%</span>
+      </div>
+      <div style="width:100%; height:8px; background:rgba(255,255,255,0.1); border-radius:4px; overflow:hidden;">
+        <div id="ytProgressBar" style="width:2%; height:100%; background:linear-gradient(90deg, #3b82f6, #ef4444); border-radius:4px; transition:width 0.3s ease;"></div>
+      </div>
+      <div id="ytProgressSub" style="font-size:11px; color:#cbd5e1; margin-top:6px;">
+        (Nếu là lần đầu tiên, hãy mở tab Google trên máy tính để bấm Cho phép ủy quyền).
+      </div>
+    `;
 
     try {
       const res = await fetch('/api/upload-youtube', {
@@ -911,29 +922,73 @@
         })
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Lỗi không xác định khi upload');
+      const startData = await res.json();
+      if (!res.ok) throw new Error(startData.detail || 'Lỗi không xác định khi bắt đầu upload');
 
-      let thumbNote = '';
-      if (data.thumbnail_status === 'success') {
-        thumbNote = '<br><span style="font-size:11px;color:#4ade80;">🖼️ Đã tự động đặt khung hình tiêu đề đầu tiên làm ảnh bìa (thumbnail).</span>';
-      } else if (data.thumbnail_status && data.thumbnail_status.startsWith('warning')) {
-        thumbNote = '<br><span style="font-size:11px;color:#fcd34d;">⚠️ Ảnh bìa: Kênh chưa bật tính năng Custom Thumbnail (hoặc chưa xác minh SĐT). Bạn có thể mở app YouTube trên điện thoại, bấm Chỉnh sửa video > Bút chì ✏️ để chọn khung đầu tiên.</span>';
-      }
+      const uploadId = startData.upload_id;
 
-      resultBox.style.background = 'rgba(34,197,94,0.15)';
-      resultBox.style.border = '1px solid rgba(34,197,94,0.4)';
-      resultBox.style.color = '#86efac';
-      resultBox.innerHTML = `🎉 <strong>Đăng YouTube Shorts thành công!</strong><br>
-        <span style="font-size:12px;color:#f1f5f9;">Tiêu đề: <em>${data.title}</em></span>${thumbNote}<br>
-        <a href="${data.video_url}" target="_blank" style="display:inline-block; margin-top:6px; color:#38bdf8; font-weight:700; text-decoration:underline;">
-          👉 Bấm vào đây để xem video trên YouTube Shorts
-        </a>`;
+      // Bắt đầu Polling tiến trình %
+      await new Promise((resolve, reject) => {
+        let attempts = 0;
+        const maxAttempts = 300; // ~3 phút tối đa
+        const interval = setInterval(async () => {
+          attempts++;
+          try {
+            const stRes = await fetch(`/api/youtube-upload-status/${uploadId}`);
+            if (!stRes.ok) throw new Error('Không thể kiểm tra trạng thái upload');
+            const stData = await stRes.json();
+
+            const pBar = document.getElementById('ytProgressBar');
+            const pPct = document.getElementById('ytProgressPct');
+            const pMsg = document.getElementById('ytProgressMsg');
+
+            if (pBar) pBar.style.width = `${stData.percent || 0}%`;
+            if (pPct) pPct.innerText = `${stData.percent || 0}%`;
+            if (pMsg) pMsg.innerText = stData.message || 'Đang xử lý...';
+
+            if (stData.status === 'completed') {
+              clearInterval(interval);
+              resolve(stData.result || {});
+            } else if (stData.status === 'failed') {
+              clearInterval(interval);
+              reject(new Error(stData.error || 'Quá trình đăng video thất bại.'));
+            }
+
+            if (attempts >= maxAttempts) {
+              clearInterval(interval);
+              reject(new Error('Quá thời gian chờ phản hồi từ YouTube. Vui lòng thử lại.'));
+            }
+          } catch (err) {
+            clearInterval(interval);
+            reject(err);
+          }
+        }, 700);
+      }).then(data => {
+        let thumbNote = '';
+        if (data.thumbnail_status === 'success') {
+          thumbNote = '<br><span style="font-size:11px;color:#4ade80;">🖼️ Đã tự động đặt khung hình tiêu đề đầu tiên làm ảnh bìa (thumbnail).</span>';
+        } else if (data.thumbnail_status && data.thumbnail_status.startsWith('warning')) {
+          thumbNote = '<br><span style="font-size:11px;color:#fcd34d;">⚠️ Ảnh bìa: Kênh chưa bật tính năng Custom Thumbnail (hoặc chưa xác minh SĐT). Bạn có thể mở app YouTube trên điện thoại, bấm Chỉnh sửa video > Bút chì ✏️ để chọn khung đầu tiên.</span>';
+        }
+
+        resultBox.style.background = 'rgba(34,197,94,0.15)';
+        resultBox.style.border = '1px solid rgba(34,197,94,0.4)';
+        resultBox.style.color = '#86efac';
+        resultBox.innerHTML = `🎉 <strong>Đăng YouTube Shorts thành công 100%!</strong><br>
+          <span style="font-size:12px;color:#f1f5f9;">Tiêu đề: <em>${data.title}</em></span>${thumbNote}<br>
+          <a href="${data.video_url}" target="_blank" style="display:inline-block; margin-top:8px; color:#38bdf8; font-weight:700; text-decoration:underline;">
+            👉 Bấm vào đây để xem video trên YouTube Shorts
+          </a>`;
+      });
+
     } catch (err) {
       resultBox.style.background = 'rgba(239,68,68,0.15)';
       resultBox.style.border = '1px solid rgba(239,68,68,0.4)';
       resultBox.style.color = '#fca5a5';
-      resultBox.innerHTML = `❌ <strong>Lỗi upload YouTube:</strong> ${err.message}`;
+      resultBox.innerHTML = `❌ <strong>Lỗi upload YouTube:</strong> ${err.message}<br>
+        <span style="font-size:11px; color:#fca5a5; display:inline-block; margin-top:4px;">
+          💡 Gợi ý: Hãy kiểm tra xem bạn đã bấm Cho phép cấp quyền trên tab Google chưa.
+        </span>`;
     } finally {
       ytBtn.disabled = false;
       document.getElementById('ytIcon').innerText = '▶️';
