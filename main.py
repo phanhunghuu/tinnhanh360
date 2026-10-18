@@ -162,6 +162,7 @@ class YouTubeUploadRequest(BaseModel):
     title: str
     description: Optional[str] = ""
     privacy: str = "public"  # 'public', 'unlisted', or 'private'
+    publish_at: Optional[str] = None  # ISO 8601 UTC timestamp, ví dụ "2026-10-19T10:00:00Z"
 
 
 @app.get("/api/youtube-status")
@@ -175,7 +176,7 @@ def youtube_status():
 
 yt_upload_jobs = {}
 
-def execute_youtube_upload(upload_id: str, video_abs_path: str, title: str, description: str, privacy: str):
+def execute_youtube_upload(upload_id: str, video_abs_path: str, title: str, description: str, privacy: str, publish_at: Optional[str] = None):
     def on_progress(percent: int, message: str):
         if upload_id in yt_upload_jobs:
             yt_upload_jobs[upload_id].update({
@@ -194,12 +195,13 @@ def execute_youtube_upload(upload_id: str, video_abs_path: str, title: str, desc
             title=title,
             description=description,
             privacy_status=privacy,
+            publish_at=publish_at,
             progress_callback=on_progress
         )
         yt_upload_jobs[upload_id].update({
             "status": "completed",
             "percent": 100,
-            "message": "Đăng video thành công!",
+            "message": "Đăng video thành công!" if not publish_at else "Đã lên lịch đăng video thành công!",
             "result": result
         })
     except Exception as e:
@@ -243,7 +245,7 @@ def upload_youtube_endpoint(req: YouTubeUploadRequest):
 
         t = threading.Thread(
             target=execute_youtube_upload,
-            args=(upload_id, video_abs_path, req.title, req.description, req.privacy),
+            args=(upload_id, video_abs_path, req.title, req.description, req.privacy, req.publish_at),
             daemon=True
         )
         t.start()

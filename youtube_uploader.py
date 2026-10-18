@@ -107,6 +107,7 @@ def upload_to_youtube(
     description: str = "",
     tags: Optional[list] = None,
     privacy_status: str = "public",
+    publish_at: Optional[str] = None,
     progress_callback: Optional[callable] = None
 ) -> Dict:
     """
@@ -115,6 +116,7 @@ def upload_to_youtube(
     - title: Tiêu đề video (tự động gắn thêm #Shorts nếu chưa có)
     - description: Mô tả chi tiết
     - privacy_status: 'public', 'unlisted', hoặc 'private'
+    - publish_at: Thời điểm công khai ISO 8601 (UTC), ví dụ "2026-10-19T10:00:00Z". Nếu có thì privacyStatus bắt buộc phải là 'private'.
     - progress_callback: Hàm nhận (percent: int, message: str) để báo tiến trình realtime
     """
     if not os.path.exists(video_path):
@@ -143,6 +145,16 @@ def upload_to_youtube(
     if progress_callback:
         progress_callback(15, "Đã kết nối YouTube thành công. Đang khởi tạo upload...")
 
+    # Cấu hình status: nếu hẹn giờ (publish_at) thì privacyStatus BẮT BUỘC là private theo quy định của YouTube API
+    status_dict = {
+        "selfDeclaredMadeForKids": False,
+    }
+    if publish_at:
+        status_dict["privacyStatus"] = "private"
+        status_dict["publishAt"] = publish_at
+    else:
+        status_dict["privacyStatus"] = privacy_status
+
     body = {
         "snippet": {
             "title": clean_title,
@@ -152,10 +164,7 @@ def upload_to_youtube(
             "defaultLanguage": "vi",
             "defaultAudioLanguage": "vi",
         },
-        "status": {
-            "privacyStatus": privacy_status,
-            "selfDeclaredMadeForKids": False,
-        }
+        "status": status_dict
     }
 
     # Upload dạng Resumable MediaUpload
@@ -214,7 +223,8 @@ def upload_to_youtube(
         "video_id": video_id,
         "video_url": video_url,
         "title": clean_title,
-        "privacy": privacy_status,
+        "privacy": "scheduled" if publish_at else privacy_status,
+        "publish_at": publish_at,
         "thumbnail_status": thumbnail_status
     }
 
