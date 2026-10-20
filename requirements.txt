@@ -25,6 +25,7 @@ sea-g2p>=0.10.0
 loguru>=0.7.2
 huggingface_hub>=0.25.0
 attrs>=23.2.0
+num2words>=0.5.14
 
 # YouTube API Integration
 google-api-python-client>=2.140.0

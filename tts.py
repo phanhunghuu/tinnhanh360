@@ -79,21 +79,26 @@ def normalize_vietnamese_text_for_tts(text: str) -> str:
 
     text = re.sub(r'(\bngày\s+)?\b(\d{1,2})[/](\d{1,2})\b', _replace_dm, text, flags=re.IGNORECASE)
 
-    # 3. Đổi số có dấu chấm hàng nghìn trước (ví dụ 990.000 -> chín trăm chín mươi nghìn)
+    # 3. Đổi số có dấu chấm/phẩy hàng nghìn trước (ví dụ 990.000 hoặc 1,500,000 -> chín trăm...)
     def _clean_thousands(m):
-        raw = m.group(0).replace('.', '')
+        raw = m.group(0).replace('.', '').replace(',', '')
         return num2words(int(raw), lang='vi')
-    text = re.sub(r'\b\d{1,3}(?:\.\d{3})+\b', _clean_thousands, text)
+    text = re.sub(r'\b\d{1,3}(?:[.,]\d{3})+\b', _clean_thousands, text)
 
-    # 4. Xử lý số thập phân tiếng Việt: 1,5 hoặc 1.5 hoặc 0,8 hoặc 12,75 -> một phẩy năm
+    # 4. Xử lý số thập phân tiếng Việt: 0,5 hoặc 1.5 hoặc 0,05 hoặc 12,75 -> không phẩy năm
     def _replace_decimal(m):
         int_part = int(m.group(1))
         dec_str = m.group(2)
         int_words = num2words(int_part, lang='vi')
-        dec_words = num2words(int(dec_str), lang='vi')
+        
+        # Nếu có số 0 ở đầu phần thập phân (ví dụ 05 -> không năm)
+        if dec_str.startswith('0'):
+            dec_words = " ".join(num2words(int(d), lang='vi') for d in dec_str)
+        else:
+            dec_words = num2words(int(dec_str), lang='vi')
         return f'{int_words} phẩy {dec_words}'
 
-    # Bắt số thập phân có 1 hoặc 2 chữ số sau dấu phẩy/chấm (tránh nhầm với số hàng nghìn 3 chữ số)
+    # Bắt số thập phân có 1 hoặc 2 chữ số sau dấu phẩy/chấm (không lẫn với hàng nghìn 3 chữ số)
     text = re.sub(r'\b(\d+)[,.](\d{1,2})\b', _replace_decimal, text)
 
     # 5. Phần trăm: 25% hoặc 0,8% -> phần trăm
@@ -272,6 +277,9 @@ def generate_tts(
     if not text:
         text = "..."
 
+    # Chuẩn hóa số, ngày tháng, phần trăm, số thập phân cho TẤT CẢ giọng đọc (Edge-TTS, Kokoro, Zalo)
+    clean_text = normalize_vietnamese_text_for_tts(text)
+
     boundaries = []
     use_zalo = voice.startswith("zalo-") and bool(zalo_api_key)
     use_kokoro = voice.startswith("kokoro-")
@@ -287,19 +295,19 @@ def generate_tts(
     edge_rate = f"{speed_pct:+d}%" if speed_pct != 0 else "+0%"
 
     if use_kokoro:
-        success = _generate_kokoro_tts(text, voice, audio_path, speed=voice_speed)
+        success = _generate_kokoro_tts(clean_text, voice, audio_path, speed=voice_speed)
         if not success:
             print(f"Kokoro TTS failed, fallbacking to Edge-TTS ({edge_fallback_voice})...")
-            boundaries = _run_in_thread(_stream_edge_tts(text, edge_fallback_voice, audio_path, rate=edge_rate, pitch=pitch_tuned))
+            boundaries = _run_in_thread(_stream_edge_tts(clean_text, edge_fallback_voice, audio_path, rate=edge_rate, pitch=pitch_tuned))
     elif use_zalo:
-        success = _generate_zalo_tts(text, voice, audio_path, zalo_api_key, speed=voice_speed)
+        success = _generate_zalo_tts(clean_text, voice, audio_path, zalo_api_key, speed=voice_speed)
         if not success:
             print(f"Zalo AI failed, fallbacking to Edge-TTS ({edge_fallback_voice})...")
-            boundaries = _run_in_thread(_stream_edge_tts(text, edge_fallback_voice, audio_path, rate=edge_rate, pitch=pitch_tuned))
+            boundaries = _run_in_thread(_stream_edge_tts(clean_text, edge_fallback_voice, audio_path, rate=edge_rate, pitch=pitch_tuned))
     else:
         # Nếu chọn Edge-TTS
         edge_voice = voice if not (voice.startswith("zalo-") or voice.startswith("kokoro-")) else edge_fallback_voice
-        boundaries = _run_in_thread(_stream_edge_tts(text, edge_voice, audio_path, rate=edge_rate, pitch=pitch_tuned))
+        boundaries = _run_in_thread(_stream_edge_tts(clean_text, edge_voice, audio_path, rate=edge_rate, pitch=pitch_tuned))
 
     # Chuẩn hóa âm thanh đầu ra về chuẩn 44100Hz Stereo MP3
     try:
