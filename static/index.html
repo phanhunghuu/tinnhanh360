@@ -100,6 +100,18 @@
     .scene-item-body { padding: 14px; display: none; }
     .scene-item-body.open { display: block; }
     .scene-item select { padding: 7px 10px; font-size: 12px; width: auto; }
+    .scene-image-picker { display:flex; align-items:flex-start; gap:16px; }
+    .scene-image-preview {
+      width:220px; height:220px; flex:0 0 220px; object-fit:contain;
+      border-radius:10px; border:1px solid rgba(255,255,255,.18);
+      background:#05070c; box-shadow:0 4px 16px rgba(0,0,0,.28);
+    }
+    .scene-image-controls { flex:1; min-width:0; }
+    @media (max-width:640px) {
+      .scene-image-picker { flex-direction:column; }
+      .scene-image-preview { width:min(100%,360px); height:320px; flex:0 0 auto; }
+      .scene-image-controls { width:100%; }
+    }
 
     /* Status & Progress */
     .status {
@@ -271,6 +283,16 @@
         </div>
         <p style="font-size:11px; color:#94a3b8; margin-top:6px;">💡 AI sẽ tổng hợp nội dung và ảnh từ tất cả bài viết thành 1 kịch bản video mạch lạc.</p>
       </div>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label for="headlineTagSelect">Nhãn mở đầu tiêu đề (tùy chọn):</label>
+        <select id="headlineTagSelect" style="width:100%;">
+          <option value="">Không thêm nhãn</option>
+          <option value="NÓNG">🔥 NÓNG</option>
+          <option value="ĐANG VIRAL">🚀 ĐANG VIRAL</option>
+          <option value="SỐC">😱 SỐC</option>
+        </select>
+        <small style="display:block;color:var(--muted);font-size:11px;margin-top:5px;">Nhãn được thêm trước tiêu đề và vào lời đọc mở đầu.</small>
+      </div>
       <div class="row2">
         <div class="form-group">
           <label>Thời lượng mục tiêu:</label>
@@ -370,6 +392,15 @@
             </div>
             <input type="range" id="voiceSpeedSlider" min="0.80" max="1.50" step="0.05" value="1.10" style="width:100%; accent-color:#38bdf8; cursor:pointer;" oninput="updateSpeedLabel(this.value)">
           </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 4px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <label for="voiceVolumeSlider">Âm lượng giọng đọc:</label>
+            <span id="voiceVolumeLabel" style="font-weight:700;color:#4ade80;font-size:13px;">200%</span>
+          </div>
+          <input type="range" id="voiceVolumeSlider" min="0" max="300" step="10" value="200" style="width:100%;accent-color:#4ade80;cursor:pointer;" oninput="updateVoiceVolumeLabel(this.value)">
+          <small style="color:var(--muted);font-size:11px;">Tăng âm lượng giọng đọc; nhạc nền giữ nguyên mức riêng.</small>
         </div>
 
         <div class="form-group" style="margin-top: 4px;">
@@ -512,6 +543,7 @@
           duration: parseInt(document.getElementById('duration').value),
           gemini_key: document.getElementById('geminiKey').value.trim() || null,
           video_style: currentVideoStyle,
+          headline_tag: document.getElementById('headlineTagSelect').value,
         })
       });
       const json = await res.json();
@@ -591,9 +623,9 @@
               <span>🖼️ Hình ảnh cho Frame này:</span>
               <span id="imgStatus_${i}" style="font-size:11px;color:#94a3b8;font-weight:normal;"></span>
             </div>
-            <div style="display:flex;align-items:center;gap:12px;">
-              <img id="sceneImgPreview_${i}" src="${activeImg || ''}" alt="Chưa có ảnh" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:#000;display:${activeImg ? 'block' : 'none'};">
-              <div style="flex:1;">
+            <div class="scene-image-picker">
+              <img id="sceneImgPreview_${i}" class="scene-image-preview" src="${activeImg || ''}" alt="Chưa có ảnh" style="display:${activeImg ? 'block' : 'none'};">
+              <div class="scene-image-controls">
                 ${articleImages.length > 0 ? `
                 <div style="margin-bottom:6px;">
                   <label style="font-size:11px;color:#94a3b8;">Chọn từ ảnh bài báo (${articleImages.length} ảnh):</label>
@@ -770,6 +802,11 @@
     document.getElementById('bgmVolumeSlider').style.opacity = isChecked ? '1' : '0.4';
   }
 
+  function updateVoiceVolumeLabel(val) {
+    const num = parseInt(val, 10) || 0;
+    document.getElementById('voiceVolumeLabel').innerText = `${num}%`;
+  }
+
   function updateSpeedLabel(val) {
     const num = parseFloat(val);
     let desc = 'Bình thường';
@@ -914,6 +951,7 @@
       const useBgm = document.getElementById('bgmToggle') ? document.getElementById('bgmToggle').checked : true;
       const bgmVol = document.getElementById('bgmVolumeSlider') ? (parseInt(document.getElementById('bgmVolumeSlider').value) / 100) : 0.10;
       const vSpeed = document.getElementById('voiceSpeedSlider') ? parseFloat(document.getElementById('voiceSpeedSlider').value) : 1.05;
+      const voiceVolume = document.getElementById('voiceVolumeSlider') ? (parseInt(document.getElementById('voiceVolumeSlider').value, 10) / 100) : 2.0;
 
       const res = await fetch('/api/render-video', {
         method: 'POST',
@@ -925,6 +963,7 @@
           scenes: currentData.scenes,
           voice: document.getElementById('voiceSelect').value,
           voice_speed: vSpeed,
+          voice_volume: voiceVolume,
           zalo_key: document.getElementById('zaloKey') ? document.getElementById('zaloKey').value.trim() : null,
           use_bgm: useBgm,
           bgm_volume: bgmVol,
@@ -1093,7 +1132,7 @@
         <div id="ytProgressBar" style="width:2%; height:100%; background:linear-gradient(90deg, #3b82f6, #ef4444); border-radius:4px; transition:width 0.3s ease;"></div>
       </div>
       <div id="ytProgressSub" style="font-size:11px; color:#cbd5e1; margin-top:6px;">
-        (Nếu là lần đầu tiên, hãy mở tab Google trên máy tính để bấm Cho phép ủy quyền).
+        Nếu không tự mở Google, link xác thực sẽ hiện ở đây để bạn bấm hoặc sao chép.
       </div>
     `;
 
@@ -1129,10 +1168,40 @@
             const pBar = document.getElementById('ytProgressBar');
             const pPct = document.getElementById('ytProgressPct');
             const pMsg = document.getElementById('ytProgressMsg');
+            const pSub = document.getElementById('ytProgressSub');
 
             if (pBar) pBar.style.width = `${stData.percent || 0}%`;
             if (pPct) pPct.innerText = `${stData.percent || 0}%`;
             if (pMsg) pMsg.innerText = stData.message || 'Đang xử lý...';
+
+            if (stData.auth_url && pSub && !pSub.dataset.authLinkShown) {
+              try {
+                const authUrl = new URL(stData.auth_url);
+                if (authUrl.protocol === 'https:' && authUrl.hostname === 'accounts.google.com') {
+                  pSub.replaceChildren(document.createTextNode('Trình duyệt không tự mở? Bấm để xác thực Google: '));
+                  const authLink = document.createElement('a');
+                  authLink.href = authUrl.href;
+                  authLink.target = '_blank';
+                  authLink.rel = 'noopener noreferrer';
+                  authLink.textContent = 'Mở trang cấp quyền';
+                  authLink.style.cssText = 'color:#93c5fd;text-decoration:underline;font-weight:700;';
+                  const copyButton = document.createElement('button');
+                  copyButton.type = 'button';
+                  copyButton.textContent = 'Sao chép link';
+                  copyButton.style.cssText = 'margin-left:8px;padding:2px 7px;font-size:10px;cursor:pointer;';
+                  copyButton.onclick = async () => {
+                    try {
+                      await navigator.clipboard.writeText(authUrl.href);
+                      copyButton.textContent = 'Đã sao chép';
+                    } catch (_) {
+                      window.prompt('Sao chép link xác thực Google:', authUrl.href);
+                    }
+                  };
+                  pSub.append(authLink, document.createTextNode(' · '), copyButton);
+                  pSub.dataset.authLinkShown = 'true';
+                }
+              } catch (_) { /* Bỏ qua URL không hợp lệ. */ }
+            }
 
             if (stData.status === 'completed') {
               clearInterval(interval);

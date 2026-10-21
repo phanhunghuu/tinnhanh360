@@ -125,6 +125,7 @@ def render_scene_clip(
     inset: Optional[dict] = None,
     fps: int = 24,
     is_last_scene: bool = False,
+    voice_volume: float = 1.0,
 ):
     """
     Dựng 1 scene clip:
@@ -133,6 +134,8 @@ def render_scene_clip(
     - Nếu is_last_scene=True: Áp dụng hiệu ứng fade out (hình ảnh tối dần về màu đen ở 1 giây cuối).
     """
     num_frames = int(duration * fps) + 2
+    voice_gain = max(0.0, min(3.0, float(voice_volume)))
+    audio_filter = f"volume={voice_gain:.2f},alimiter=limit=0.95"
 
     # Tính điểm bắt đầu fade out hình ảnh nếu là frame cuối
     v_fade = ""
@@ -165,6 +168,7 @@ def render_scene_clip(
             "-i", audio_path,                      # Audio
             "-filter_complex", filter_complex,
             "-map", "[out]", "-map", "2:a",
+            "-filter:a", audio_filter,
             "-c:v", "libx264", "-preset", "ultrafast", "-tune", "fastdecode", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "128k",
             "-max_muxing_queue_size", "1024",
@@ -181,6 +185,7 @@ def render_scene_clip(
             "-i", audio_path,
             "-vf", filter_str,
             "-map", "0:v", "-map", "1:a",
+            "-filter:a", audio_filter,
             "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "128k",
             "-max_muxing_queue_size", "1024",
@@ -205,6 +210,7 @@ def render_full_video(
     fps: int = 24,
     bgm_path: Optional[str] = None,
     bgm_volume: float = 0.15,
+    voice_volume: float = 1.0,
     progress_callback: Optional[callable] = None,
 ):
     """
@@ -290,6 +296,7 @@ def render_full_video(
                 output_path=clip_out,
                 inset=result["inset"],
                 fps=fps,
+                voice_volume=voice_volume,
             )
 
         elif sc_type == "follow":
@@ -305,6 +312,7 @@ def render_full_video(
                 output_path=clip_out,
                 inset=None,
                 fps=fps,
+                voice_volume=voice_volume,
                 is_last_scene=(idx == len(scenes) - 1),
             )
 
@@ -329,6 +337,7 @@ def render_full_video(
                 output_path=clip_out,
                 inset=result["inset"],
                 fps=fps,
+                voice_volume=voice_volume,
                 is_last_scene=(idx == len(scenes) - 1),
             )
 

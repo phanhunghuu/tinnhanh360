@@ -3,9 +3,18 @@ Main FastAPI server
 """
 import os
 import re
+import sys
 import time
 import uuid
 import unicodedata
+
+# Windows console hay dùng cp1252; tránh crash khi log có tiếng Việt.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(errors="backslashreplace")
+    except (AttributeError, OSError, ValueError):
+        pass
+
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -40,6 +49,7 @@ class ParseRequest(BaseModel):
     duration: int = 60
     gemini_key: Optional[str] = None
     video_style: str = "tin_tuc"  # tin_tuc | vu_an | khoa_hoc | tong_hop
+    headline_tag: str = ""
 
 
 import unicodedata
@@ -64,6 +74,7 @@ class RenderRequest(BaseModel):
     scenes: List[dict]
     voice: str = "zalo-3"
     voice_speed: float = 1.05
+    voice_volume: float = 2.0
     zalo_key: Optional[str] = "c6B974D16LbRHcSR1hRGGswtXV0LUOr6"
     use_bgm: bool = True
     bgm_volume: float = 0.10
@@ -184,6 +195,10 @@ def execute_youtube_upload(upload_id: str, video_abs_path: str, title: str, desc
                 "message": message,
             })
 
+    def on_auth_url(url: str):
+        if upload_id in yt_upload_jobs:
+            yt_upload_jobs[upload_id]["auth_url"] = url
+
     try:
         yt_upload_jobs[upload_id].update({
             "status": "uploading",
@@ -196,7 +211,8 @@ def execute_youtube_upload(upload_id: str, video_abs_path: str, title: str, desc
             description=description,
             privacy_status=privacy,
             publish_at=publish_at,
-            progress_callback=on_progress
+            progress_callback=on_progress,
+            auth_url_callback=on_auth_url,
         )
         yt_upload_jobs[upload_id].update({
             "status": "completed",
@@ -240,7 +256,8 @@ def upload_youtube_endpoint(req: YouTubeUploadRequest):
             "percent": 2,
             "message": "Đang chuẩn bị video...",
             "result": None,
-            "error": None
+            "error": None,
+            "auth_url": None,
         }
 
         t = threading.Thread(
@@ -289,12 +306,32 @@ async def parse_article(req: ParseRequest):
         if not article["content"] or len(article["content"].strip()) < 20 or article["content"].startswith("Không thể đọc nội dung"):
             raise Exception(f"Không cào được chữ từ link (nội dung rỗng hoặc bị trang báo chặn/yêu cầu captcha). Hãy thử dán trực tiếp đoạn văn bản bài báo vào ô.")
 
+        headline_tag = req.headline_tag.strip().upper()
+        if headline_tag not in {"", "NÓNG", "ĐANG VIRAL", "SỐC"}:
+            raise Exception("Nhãn tiêu đề không hợp lệ.")
+        article_for_ai = article
+        if headline_tag:
+            article_for_ai = dict(article)
+            original_title = (article.get("title") or "Tin tức mới nhất").strip()
+            if not original_title.upper().startswith(headline_tag):
+                article_for_ai["title"] = f"{headline_tag} {original_title}"
+
         parsed = parse_article_to_scenes(
-            article,
+            article_for_ai,
             duration_seconds=req.duration,
             api_key=req.gemini_key or None,
             video_style=video_style,
         )
+        if headline_tag:
+            tagged_title = article_for_ai["title"]
+            parsed["title"] = tagged_title
+            title_scene = next(
+                (scene for scene in parsed.get("scenes", []) if scene.get("type") == "title_hero"),
+                parsed.get("scenes", [None])[0] if parsed.get("scenes") else None,
+            )
+            if title_scene:
+                title_scene["headline"] = tagged_title
+                title_scene["text"] = tagged_title
         return {"success": True, "data": parsed}
     except Exception as e:
         import traceback
@@ -383,6 +420,7 @@ def execute_render_job(job_id: str, req_data: dict):
             final_output_path=final_path,
             bgm_path=bgm_to_use,
             bgm_volume=req_data.get("bgm_volume", 0.10),
+            voice_volume=req_data.get("voice_volume", 2.0),
             progress_callback=on_video_progress,
         )
 
@@ -419,6 +457,7 @@ async def render_video(req: RenderRequest):
         "scenes": req.scenes,
         "voice": req.voice,
         "voice_speed": req.voice_speed,
+        "voice_volume": req.voice_volume,
         "zalo_key": req.zalo_key,
         "use_bgm": req.use_bgm,
         "bgm_volume": req.bgm_volume,

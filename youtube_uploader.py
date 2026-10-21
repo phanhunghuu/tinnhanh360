@@ -38,7 +38,10 @@ def is_youtube_authenticated() -> bool:
         return False
 
 
-def get_youtube_credentials(open_browser: bool = True) -> Credentials:
+def get_youtube_credentials(
+    open_browser: bool = True,
+    auth_url_callback: Optional[callable] = None,
+) -> Credentials:
     """Lấy credentials, nếu hết hạn thì tự refresh hoặc mở OAuth flow."""
     creds = None
     if os.path.exists(TOKEN_FILE):
@@ -60,12 +63,28 @@ def get_youtube_credentials(open_browser: bool = True) -> Credentials:
                 scopes=SCOPES
             )
             # Chạy local server trên cổng ngẫu nhiên khả dụng để nhận callback từ Google
-            creds = flow.run_local_server(
-                port=0,
-                prompt='consent',
-                access_type='offline',
-                open_browser=open_browser
-            )
+            if open_browser and auth_url_callback:
+                class _AuthPrompt:
+                    def format(self, *, url):
+                        auth_url_callback(url)
+                        return "Google authorization link is ready in the app."
+
+                # Không phụ thuộc vào việc Windows có mở được browser từ server thread.
+                # Giao diện sẽ đưa link cho người dùng bấm hoặc sao chép.
+                creds = flow.run_local_server(
+                    port=0,
+                    prompt='consent',
+                    access_type='offline',
+                    authorization_prompt_message=_AuthPrompt(),
+                    open_browser=False
+                )
+            else:
+                creds = flow.run_local_server(
+                    port=0,
+                    prompt='consent',
+                    access_type='offline',
+                    open_browser=open_browser
+                )
 
         with open(TOKEN_FILE, "w") as token:
             token.write(creds.to_json())
@@ -108,7 +127,8 @@ def upload_to_youtube(
     tags: Optional[list] = None,
     privacy_status: str = "public",
     publish_at: Optional[str] = None,
-    progress_callback: Optional[callable] = None
+    progress_callback: Optional[callable] = None,
+    auth_url_callback: Optional[callable] = None,
 ) -> Dict:
     """
     Tải video lên YouTube Shorts và tự động đặt khung ảnh đầu tiên làm thumbnail (ảnh bìa).
@@ -139,7 +159,7 @@ def upload_to_youtube(
     if not description:
         description = f"{title}\n\nCập nhật tin tức nhanh chóng & chính xác.\n#Shorts #tintuc24h #thoisu"
 
-    creds = get_youtube_credentials()
+    creds = get_youtube_credentials(auth_url_callback=auth_url_callback)
     youtube = build("youtube", "v3", credentials=creds)
 
     if progress_callback:

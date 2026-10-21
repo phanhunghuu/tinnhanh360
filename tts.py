@@ -244,12 +244,8 @@ async def _stream_edge_tts(text: str, voice: str, audio_path: str, rate: str = "
             last_err = e
             await asyncio.sleep(0.8 * (attempt + 1))
 
-    print(f"Warning: Edge-TTS failed for text '{text[:40]}...': {last_err}. Using fallback.")
-    subprocess.run([
-        "ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
-        "-t", "2.0", audio_path
-    ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return []
+    print(f"Warning: Edge-TTS failed after 3 attempts: {last_err}.")
+    raise RuntimeError(f"Edge-TTS failed after 3 attempts: {last_err}") from last_err
 
 
 def _run_in_thread(coro):
@@ -287,7 +283,9 @@ def generate_tts(
     # Ánh xạ giới tính khi cần fallback sang Edge-TTS
     is_male = voice in ["zalo-3", "zalo-4", "vi-VN-NamMinhNeural", "kokoro-hung_thinh", "kokoro-manh_dung", "kokoro-tuan_ngoc"]
     edge_fallback_voice = "vi-VN-NamMinhNeural" if is_male else "vi-VN-HoaiMyNeural"
-    pitch_tuned = "-3Hz" if is_male else "-1Hz"
+    # Edge-TTS can close the stream without audio for the speed + lowered-pitch
+    # combination; neutral pitch is reliable at the default 1.10x rate.
+    pitch_tuned = "+0Hz"
 
     # Tính toán rate cho Edge-TTS dựa trên voice_speed
     # Ví dụ: 1.0 -> +0%, 1.15 -> +15%, 1.25 -> +25%
