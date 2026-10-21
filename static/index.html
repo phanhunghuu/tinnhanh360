@@ -2,8 +2,14 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>AI News Video Maker Pro</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#ef4444">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="TinNhanh360">
+  <link rel="apple-touch-icon" href="/static/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
@@ -1258,6 +1264,15 @@
       document.getElementById('ytIcon').innerText = '▶️';
       document.getElementById('ytText').innerText = (document.querySelector('input[name="ytUploadMode"]:checked')?.value === 'schedule') ? 'Lên Lịch Đăng Shorts' : 'Đăng YouTube Shorts';
     }
+  }
+
+  // Đăng ký Service Worker cho Progressive Web App (PWA)
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(err => {
+        console.log('ServiceWorker registration failed: ', err);
+      });
+    });
   }
 </script>
 </body>
