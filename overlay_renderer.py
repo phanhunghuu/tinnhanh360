@@ -92,36 +92,103 @@ def _wrap(text: str, font, max_w: int, draw: ImageDraw.Draw) -> List[str]:
     return lines or [text]
 
 
+import re
+
+HEADLINE_TAGS = ["NÓNG", "ĐANG VIRAL", "SỐC"]
+
+def _parse_headline_tag(text: str):
+    """Tách tag (NÓNG, ĐANG VIRAL, SỐC) nếu có ở đầu tiêu đề và phần nội dung còn lại."""
+    clean = text.strip()
+    for tag in HEADLINE_TAGS:
+        pattern = r'^(' + re.escape(tag) + r')(?::\s*|\s+)(.*)$'
+        m = re.match(pattern, clean, flags=re.IGNORECASE)
+        if m:
+            return m.group(1).upper(), m.group(2).strip()
+    return None, clean
+
+
 def _draw_top_title(draw: ImageDraw.Draw, title: str, start_y: int = 250, max_bottom: int = 470):
     """
     Vẽ tiêu đề chính NẰM PHÍA TRÊN KHUNG ẢNH kèm vạch đỏ dọc bên trái đúng như mẫu.
+    Nếu tiêu đề có nhãn NÓNG, ĐANG VIRAL, SỐC thì đóng khung badge đỏ nổi bật riêng kèm dấu ':'.
     Đảm bảo xuất hiện đồng nhất trên cả Frame Title và tất cả Frame Detail.
     """
+    found_tag, clean_title = _parse_headline_tag(title)
     max_text_w = W - 280
+    bar_x = 108
+    bar_w = 12
+    text_x = 148
+
     for font_size in [52, 46, 40, 36]:
         font_title = _font_black(font_size)
-        lines = _wrap(title, font_title, max_text_w, draw)
         line_h = font_size + 12
+
+        if found_tag:
+            tag_text = f"{found_tag}:"
+            tag_font = _font_black(int(font_size * 0.72))
+            tag_w = int(draw.textlength(tag_text, font=tag_font))
+            badge_pad_x = 14
+            badge_w = tag_w + badge_pad_x * 2
+            badge_h = font_size + 2
+
+            first_line_max_w = max_text_w - badge_w - 14
+            words = clean_title.split()
+            first_line_words = []
+            rem_words = []
+            for i, w in enumerate(words):
+                test = " ".join(first_line_words + [w])
+                if draw.textlength(test, font=font_title) <= first_line_max_w:
+                    first_line_words.append(w)
+                else:
+                    rem_words = words[i:]
+                    break
+            else:
+                rem_words = []
+
+            lines = [" ".join(first_line_words)] if first_line_words else []
+            if rem_words:
+                lines += _wrap(" ".join(rem_words), font_title, max_text_w, draw)
+        else:
+            lines = _wrap(clean_title, font_title, max_text_w, draw)
+
         total_h = len(lines) * line_h
         if start_y + total_h <= max_bottom:
             break
 
     # Vạch đỏ dọc bên trái tiêu đề
-    bar_x = 108
-    bar_w = 12
     draw.rounded_rectangle(
         [(bar_x, start_y + 2), (bar_x + bar_w, start_y + total_h - 2)],
         radius=5, fill=(220, 18, 28, 255)
     )
 
-    # Vẽ chữ tiêu đề
-    text_x = 148
-    for i, line in enumerate(lines):
-        y = start_y + i * line_h
-        if y + line_h > max_bottom + 10:
-            break
-        draw.text((text_x + 2, y + 2), line, font=font_title, fill=(0, 0, 0, 200))
-        draw.text((text_x, y), line, font=font_title, fill=(255, 255, 255, 255))
+    if found_tag and lines:
+        # Vẽ khung badge đỏ nổi bật riêng cho tag (NÓNG:, ĐANG VIRAL:, SỐC:)
+        badge_y = start_y + 1
+        badge_box = [(text_x, badge_y), (text_x + badge_w, badge_y + badge_h)]
+        draw.rounded_rectangle(badge_box, radius=7, fill=(220, 18, 28, 255))
+        draw.text(
+            (text_x + badge_pad_x, badge_y + (badge_h - int(font_size * 0.72)) // 2 - 2),
+            tag_text, font=tag_font, fill=(255, 255, 255, 255)
+        )
+
+        # Chữ dòng 1 hiển thị ngay sau khung badge
+        first_text_x = text_x + badge_w + 14
+        draw.text((first_text_x + 2, start_y + 2), lines[0], font=font_title, fill=(0, 0, 0, 200))
+        draw.text((first_text_x, start_y), lines[0], font=font_title, fill=(255, 255, 255, 255))
+
+        for i, line in enumerate(lines[1:], start=1):
+            y = start_y + i * line_h
+            if y + line_h > max_bottom + 10:
+                break
+            draw.text((text_x + 2, y + 2), line, font=font_title, fill=(0, 0, 0, 200))
+            draw.text((text_x, y), line, font=font_title, fill=(255, 255, 255, 255))
+    else:
+        for i, line in enumerate(lines):
+            y = start_y + i * line_h
+            if y + line_h > max_bottom + 10:
+                break
+            draw.text((text_x + 2, y + 2), line, font=font_title, fill=(0, 0, 0, 200))
+            draw.text((text_x, y), line, font=font_title, fill=(255, 255, 255, 255))
 
     return start_y + total_h
 
@@ -308,23 +375,47 @@ def make_title_hero_overlay(
     draw = ImageDraw.Draw(canvas)
 
     # 5. Tiêu đề Inter-Black 900 ở dưới khung ảnh
-    font_size = 62
-    font_title = _font_black(font_size)
+    found_tag, clean_title = _parse_headline_tag(title)
     max_text_w = W - 280
-    lines = _wrap(title, font_title, max_text_w, draw)
+    bar_x = 108
+    bar_w = 14
+    text_x = 155
 
-    # Co chữ nếu quá dài
-    if len(lines) > 5:
-        font_size = 52
+    for font_size in [62, 56, 52, 46]:
         font_title = _font_black(font_size)
-        lines = _wrap(title, font_title, max_text_w, draw)
-    elif len(lines) > 4:
-        font_size = 56
-        font_title = _font_black(font_size)
-        lines = _wrap(title, font_title, max_text_w, draw)
+        line_h = font_size + 14
 
-    line_h = font_size + 14
-    total_h = len(lines) * line_h
+        if found_tag:
+            tag_text = f"{found_tag}:"
+            tag_font = _font_black(int(font_size * 0.72))
+            tag_w = int(draw.textlength(tag_text, font=tag_font))
+            badge_pad_x = 18
+            badge_w = tag_w + badge_pad_x * 2
+            badge_h = font_size + 4
+
+            first_line_max_w = max_text_w - badge_w - 18
+            words = clean_title.split()
+            first_line_words = []
+            rem_words = []
+            for i, w in enumerate(words):
+                test = " ".join(first_line_words + [w])
+                if draw.textlength(test, font=font_title) <= first_line_max_w:
+                    first_line_words.append(w)
+                else:
+                    rem_words = words[i:]
+                    break
+            else:
+                rem_words = []
+
+            lines = [" ".join(first_line_words)] if first_line_words else []
+            if rem_words:
+                lines += _wrap(" ".join(rem_words), font_title, max_text_w, draw)
+        else:
+            lines = _wrap(clean_title, font_title, max_text_w, draw)
+
+        total_h = len(lines) * line_h
+        if len(lines) <= 5:
+            break
 
     # Vị trí tiêu đề: dưới khung ảnh, trên ngày đăng
     inset_bottom = inset["y"] + inset["h"]
@@ -337,19 +428,35 @@ def make_title_hero_overlay(
         start_y = title_area_top
 
     # Vạch đỏ dọc bên trái tiêu đề
-    bar_x = 108
-    bar_w = 14
     draw.rounded_rectangle(
         [(bar_x, start_y + 4), (bar_x + bar_w, start_y + total_h - 4)],
         radius=6, fill=(220, 18, 28, 255)
     )
 
-    # Vẽ tiêu đề
-    text_x = 155
-    for i, line in enumerate(lines):
-        y = start_y + i * line_h
-        draw.text((text_x + 3, y + 3), line, font=font_title, fill=(0, 0, 0, 200))
-        draw.text((text_x, y), line, font=font_title, fill=(255, 255, 255, 255))
+    if found_tag and lines:
+        # Vẽ badge đỏ riêng cho tag (NÓNG:, ĐANG VIRAL:, SỐC:)
+        badge_y = start_y + 2
+        badge_box = [(text_x, badge_y), (text_x + badge_w, badge_y + badge_h)]
+        draw.rounded_rectangle(badge_box, radius=8, fill=(220, 18, 28, 255))
+        draw.text(
+            (text_x + badge_pad_x, badge_y + (badge_h - int(font_size * 0.72)) // 2 - 3),
+            tag_text, font=tag_font, fill=(255, 255, 255, 255)
+        )
+
+        # Chữ dòng 1 ngay sau badge
+        first_text_x = text_x + badge_w + 18
+        draw.text((first_text_x + 3, start_y + 3), lines[0], font=font_title, fill=(0, 0, 0, 200))
+        draw.text((first_text_x, start_y), lines[0], font=font_title, fill=(255, 255, 255, 255))
+
+        for i, line in enumerate(lines[1:], start=1):
+            y = start_y + i * line_h
+            draw.text((text_x + 3, y + 3), line, font=font_title, fill=(0, 0, 0, 200))
+            draw.text((text_x, y), line, font=font_title, fill=(255, 255, 255, 255))
+    else:
+        for i, line in enumerate(lines):
+            y = start_y + i * line_h
+            draw.text((text_x + 3, y + 3), line, font=font_title, fill=(0, 0, 0, 200))
+            draw.text((text_x, y), line, font=font_title, fill=(255, 255, 255, 255))
 
     # 6. Ngày đăng ở đáy
     _draw_date(draw, date_str or get_current_date_str(), left=108, bottom=1720)
